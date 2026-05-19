@@ -18,13 +18,13 @@ Five weeks ago you proposed a 3-tier architecture (W1). You laid down storage an
 
 W6 does not add a sixth capability layer. W6 takes the application your team redeploys on Monday — the same architecture, the same business domain, the same design decisions carried forward from W1 through W5 — and asks: can you OPERATE it? You are not re-graded on those weeks. Take what you built — the architecture, the business domain, the code — and apply the W6 operational lens to it.
 
-Real systems fail in predictable ways that have nothing to do with the network. An alarm fires but it is stuck in INSUFFICIENT_DATA because the application never generated a single data point before Friday. Tags exist on three resources and not on ten others, so Cost Explorer shows the account total but cannot attribute a single dollar to your workload. Trusted Advisor flags two idle EC2 instances from a Monday redeployment experiment — and the team documents them as "interesting" but terminates nothing, changes nothing, keeps spending. A gp2 EBS volume is running at burst-credit exhaustion and nobody has migrated it to gp3 because nobody looked at the IOPS baseline. A Config rule is enabled but no one has ever triggered a non-compliance to confirm the auto-remediation actually runs.
+Real systems fail in predictable ways that have nothing to do with the network. An alarm fires but it is stuck in INSUFFICIENT_DATA because the application never generated a single data point before Friday. Tags exist on three resources and not on ten others, so Cost Explorer shows the account total but cannot attribute a single dollar to your workload. Trusted Advisor flags two idle EC2 instances from a Monday redeployment experiment — and the team documents them as "interesting" but terminates nothing, changes nothing, keeps spending. A gp2 EBS volume is running at burst-credit exhaustion and nobody has migrated it to gp3 because nobody looked at the IOPS baseline. A security alarm exists but no one has ever triggered the violation to confirm the auto-remediation actually fixes it.
 
 Each of these is a gap between "deployed" and "production-ready." None of them shows up in a network diagram. They show up at 2am when something breaks — or at month-end when the bill arrives.
 
 W6 closes these gaps — on the application your team redeploys on Monday using the same design your group has been evolving since W1. Four operational layers must be demonstrably in place by Friday. Not documented. Demonstrable. You will walk a trainer through each one live.
 
-The principle for this week: **demonstrable, not documented.** A tag is not a cost allocation until it is activated in the Billing console. A cost guard is not control until automation has actually stopped a resource. A CloudWatch alarm is not an alarm until it has data to evaluate. A Config rule is not compliance-as-code until you have triggered a violation and watched it auto-remediate. Build, verify, and show.
+The principle for this week: **demonstrable, not documented.** A tag is not a cost allocation until it is activated in the Billing console. A cost guard is not control until automation has actually stopped a resource. A CloudWatch alarm is not an alarm until it has data to evaluate. A security guard is not self-healing until you have triggered a violation and watched it auto-remediate. Build, verify, and show.
 
 ---
 
@@ -32,7 +32,7 @@ The principle for this week: **demonstrable, not documented.** A tag is not a co
 
 The workshop account resets each week. What carries forward is your **architecture diagram**, your **business domain**, your **design decisions**, and your **code repository**. Use your W5 Evidence Pack as a starting reference — open it Monday morning when you sit down with the fresh account.
 
-Redeploy whatever subset of your application you need to demonstrate the four W6 must-haves. You do not need to re-prove every feature from W1-W5 — that work was already evaluated in those weeks. W6 grading focuses on the 4 W6 MHs — Cost Visibility & Attribution, Cost Control & Action, Monitoring, Security via Config — applied to whatever you redeployed this week.
+Redeploy whatever subset of your application you need to demonstrate the four W6 must-haves. You do not need to re-prove every feature from W1-W5 — that work was already evaluated in those weeks. W6 grading focuses on the 4 W6 MHs — Cost Visibility & Attribution, Cost Control & Action, Monitoring, Self-Healing Security Guard — applied to whatever you redeployed this week.
 
 **Friday Part 1 expectation (light) — project recap only:**
 - A short verbal/slide recap of the project: what the application is, its business domain, and the key architecture and design decisions carried forward from W1-W5 — enough to frame the W6 operational work
@@ -48,13 +48,15 @@ That's it. Part 1 is purely a recap that sets context. No live app action is req
 
 Last week a group left resources running idle and burned over a thousand dollars on an account used only for the workshop. That stops this week. A complete 3-tier workshop stack never needs anywhere near $150 — this ceiling is generous. Exceeding it means an expensive resource was left running 24/7 unused, not that the group built more.
 
+![Actual W5 AWS cost — a workshop-only account that burned over a thousand dollars on idle resources, which is why the $150 cap now exists](../assets/cost-w5.png)
+
 How to choose resources to stay under $150 (Single-AZ, smallest instance that works, serverless where possible, shut down anything not needed overnight, no Bedrock Provisioned Throughput / OpenSearch multi-node / EKS) is in the mandatory companion memo, shared alongside this announcement. Keeping cost ≤ $150 and proving you actively controlled spend **is MH-COST-V + MH-COST-A** — it is not extra work.
 
 ---
 
 ## What You Must Deliver (The Four Core Must-Haves)
 
-All four must-haves must be demonstrable on Friday. Two of them are cost must-haves: **MH-COST-V** (cost visibility & attribution) and **MH-COST-A** (cost control & action). The other two are **MH-OBS** (monitoring) and **MH-SEC** (security via Config). These map to what you are learning this week: cost visibility on Monday, CloudWatch + cost tools on Tuesday, security via Config on Wednesday. Build as you learn — the Evidence Pack screenshot from Tuesday is always more credible than one reconstructed on Thursday night.
+All four must-haves must be demonstrable on Friday. Two of them are cost must-haves: **MH-COST-V** (cost visibility & attribution) and **MH-COST-A** (cost control & action). The other two are **MH-OBS** (monitoring) and **MH-SEC** (Self-Healing Security Guard). These map to what you are learning this week: cost visibility on Monday, CloudWatch + cost tools on Tuesday, security automation on Wednesday. Build as you learn — the Evidence Pack screenshot from Tuesday is always more credible than one reconstructed on Thursday night.
 
 **Cost gate:** In addition to the four must-haves below, an account total ≤ $150 is a prerequisite — exceed the ceiling and the W6 assignment fails even if all four MHs are done well (see the Hard Rule above).
 
@@ -178,17 +180,22 @@ filter errorCode="AccessDenied"
 
 ---
 
-### 4. MH-SEC — Security via Config: Prove Your Infrastructure Enforces Its Own Rules
+### 4. MH-SEC — Self-Healing Security Guard: Prove Your Infrastructure Fixes Its Own Violations
 
-IAM policies and Security Groups were W2 and W5 territory. W6 goes a layer deeper: compliance-as-code that continuously monitors your configuration and automatically fixes violations.
+IAM policies and Security Groups were W2 and W5 territory. W6 goes a layer deeper: a detect→auto-fix loop that catches one security misconfiguration on your redeployed stack and remediates it automatically. This deliberately reuses the EventBridge→Lambda pattern you already build for the MH-COST-A Cost Guard.
 
-**Required for every group — AWS Config:**
+> AWS Config configuration recorder, managed Config rules, SSM Automation runbooks, and an AutomationAssumeRole are **NOT REQUIRED** for MH-SEC — they are the fragile pieces and often cannot be enabled inside the 48h sandbox account. AWS Config may be mentioned only as an OPTIONAL alternative detection source — never required. No Config compliance dashboard is required.
 
-- [ ] Config recording enabled (configuration recorder active in your account)
-- [ ] At least one managed Config rule deployed and showing evaluation results (Compliant / Non-Compliant counts visible in the dashboard). Choose a rule that applies to your actual deployed resources: `s3-bucket-public-read-prohibited`, `encrypted-volumes`, `iam-password-policy`, `restricted-ssh`, or equivalent.
-- [ ] Auto-remediation wired up: Config rule non-compliant → EventBridge → SSM Automation runbook OR Lambda. Demo the loop: intentionally create a non-compliant resource, wait for Config to detect it (60-180 seconds for a configuration-change rule), screenshot Non-Compliant state, watch remediation trigger, screenshot Compliant state restored. CloudTrail evidence of the remediation execution.
+**Required for every group — the detect→auto-fix loop:**
 
-**Plus one of the following supporting controls (choose one):**
+- [ ] A **Lambda** that detects ONE security misconfiguration on the redeployed stack and auto-fixes it via boto3. Choose one (the two cleanest, recommended):
+  - Security Group ingress open to `0.0.0.0/0` on port 22/3389 → `RevokeSecurityGroupIngress`; OR
+  - S3 bucket made public → `PutPublicAccessBlock` (enable Block Public Access on the bucket).
+  - (An unencrypted-EBS/RDS detector is acceptable, but the SG / S3-public fixes are the cleanest deterministic remediations.)
+- [ ] A **trigger** with a least-privilege IAM role: either an EventBridge rule on the CloudTrail/API event (`AuthorizeSecurityGroupIngress`, `PutBucketPolicy`/`PutBucketAcl`) for near-real-time remediation, OR an EventBridge Scheduler daily cron (the same reliable mechanism as the Cost Guard) as a fallback.
+- [ ] A **demonstrated loop**: intentionally create the violation → Lambda detects + fixes it → evidence = a before (insecure) screenshot + an after (remediated) screenshot + the CloudTrail event of the fix API call (`RevokeSecurityGroupIngress` / `PutPublicAccessBlock`).
+
+**Plus ONE supporting preventive control (choose one):**
 
 **Path A — KMS Customer Managed Key on a data store**
 
@@ -196,25 +203,29 @@ IAM policies and Security Groups were W2 and W5 territory. W6 goes a layer deepe
 |------|-----------|
 | Create CMK | KMS console → Customer managed keys → Create (Symmetric, Encrypt and decrypt). Set alias: `alias/appname-rds-prod` or equivalent. |
 | Enable rotation | Key configuration → Automatic key rotation → Enabled |
-| Apply to your data store | Modify existing RDS / S3 / EBS / EFS / DynamoDB to use the CMK (not `aws/s3` or `aws/rds` — those are AWS-managed, you do not control them) |
+| Apply to your data store | Modify a redeployed RDS / S3 / EBS / EFS / DynamoDB to use the CMK (not `aws/s3` or `aws/rds` — those are AWS-managed, you do not control them) |
 | Verify via CloudTrail | CloudTrail → Event history → filter `kms:GenerateDataKey` or `kms:Decrypt` — events from `rds.amazonaws.com` or `s3.amazonaws.com` confirm the CMK is in active use |
-| Pair with Config | Use a Config rule like `encrypted-volumes` or `s3-bucket-server-side-encryption-enabled` to detect unencrypted resources and complement your CMK deployment |
 
-**Path B — Security Hub findings reviewed**
+**Path B — Account-level S3 Block Public Access + deny policy**
 
 | Step | What to do |
 |------|-----------|
-| Enable Security Hub | Enable with AWS Foundational Security Best Practices standard |
-| Enable GuardDuty | Security Hub surfaces GuardDuty findings — GuardDuty must be on |
-| Review findings | Screenshot findings summary (severity breakdown). Document 2 HIGH/MEDIUM findings: what it is, why it exists, production remediation |
-| Suppress one finding | Choose one finding that is acceptable in your workshop account. Write a suppression justification |
-| Pair with Config | Choose a Config rule that mirrors a Security Hub finding to show both control layers |
+| Account BPA | S3 console → Block Public Access settings for this account → all four settings ON |
+| Deny policy | Add a bucket policy that denies unencrypted PutObject (`s3:x-amz-server-side-encryption` missing) OR non-TLS PutObject (`aws:SecureTransport=false`) |
+| Prove it | Show the policy + a denied test call (an attempt that is rejected by the policy) |
 
-**Security-cost trade-off (required — both paths):** Your Evidence Pack must include 1-2 sentences explaining what the chosen control costs and why that cost is justified. "It's more secure" is not an acceptable answer — name the cost and the justification.
+**Path C — IAM Access Analyzer**
 
-**Pass condition:** Config recording enabled + at least one managed rule deployed + compliance dashboard showing real evaluation results + auto-remediation loop demonstrated (before/after screenshots + CloudTrail evidence). Plus one supporting control. Security-cost trade-off statement in Evidence Pack.
+| Step | What to do |
+|------|-----------|
+| Enable | Enable IAM Access Analyzer in your account |
+| Triage | Surface ≥1 external-access finding and triage it: what it is, whether it is intended, the production remediation |
 
-**Pitfall to avoid (Config path):** Deploying a Config rule and never triggering a violation. The required demo is the full loop: non-compliance detected → auto-remediation triggered → compliant state restored.
+**Security-cost trade-off (required — all paths):** Your Evidence Pack must include 1-2 sentences explaining what the chosen control costs and why that cost is justified. "It's more secure" is not an acceptable answer — name the cost and the justification.
+
+**Pass condition:** Lambda + trigger deployed (least-privilege); a demonstrated detect→fix loop with before/after screenshots + CloudTrail of the remediation API call; one supporting preventive control with evidence; security-cost statement. No Config recorder / managed Config rule / SSM Automation / AutomationAssumeRole is required.
+
+**Pitfall to avoid:** A security control that only detects, logs, or alerts but does not fix. MH-SEC is graded on the demonstrated automated remediation (the CloudTrail event of the fix API call), not a finding or an alarm.
 
 ---
 
@@ -232,7 +243,7 @@ W3 design: RDS PostgreSQL. W4: Bedrock KB, Lambda agent tools. W5: API Gateway +
 
 **MH-OBS:** Custom metric `bedrock_query_latency_ms` published from the redeployed retrieval Lambda. Alarm on RDS `DatabaseConnections` (threshold: >20, action: SNS to group email). Log Insights query against the redeployed API Gateway logs showing the top 10 slowest endpoint calls. CloudWatch dashboard: Bedrock latency (custom), RDS connections (standard), Lambda error rate (standard).
 
-**MH-SEC:** Config rule `s3-bucket-server-side-encryption-enabled` against the redeployed KB-source S3 bucket. Auto-remediation: SSM Automation `AWS-EnableS3BucketEncryption` with Automatic execution. Demo loop: create test bucket without SSE → Config flags Non-Compliant → SSM Automation runs → Compliant restored → CloudTrail shows automation execution. KMS CMK `alias/healthbot-rds-prod` applied to the redeployed RDS instance. CloudTrail shows `kms:GenerateDataKey` from `rds.amazonaws.com` — active use confirmed. Security-cost statement: "CMK costs $1/month. Justified by the audit trail requirement — every decrypt event is logged with the IAM principal who accessed patient-related data."
+**MH-SEC:** Self-Healing Security Guard — a Lambda that detects the KB-source S3 bucket being made public and calls `PutPublicAccessBlock` to re-enable Block Public Access; least-privilege role limited to `s3:PutPublicAccessBlock` / `s3:GetBucketPolicyStatus`. Trigger: EventBridge rule on the `PutBucketPolicy`/`PutBucketAcl` CloudTrail event. Demo loop: intentionally make the bucket public → before screenshot (public) → Lambda fixes it → after screenshot (Block Public Access on) → CloudTrail shows `PutPublicAccessBlock`. Supporting control: KMS CMK `alias/healthbot-rds-prod` applied to the redeployed RDS instance; CloudTrail shows `kms:GenerateDataKey` from `rds.amazonaws.com` — active use confirmed. Security-cost statement: "CMK costs $1/month. Justified by the audit trail requirement — every decrypt event is logged with the IAM principal who accessed patient-related data."
 
 ---
 
@@ -246,7 +257,7 @@ W3 design: DynamoDB transactions table, Lambda CRUD handlers. W4: Glue ETL, Step
 
 **MH-OBS:** Custom metric `dynamodb_write_latency_ms` from the redeployed CRUD Lambda. Alarm on `ConsumedWriteCapacityUnits` for the redeployed DynamoDB table. Log Insights query against API Gateway logs: `filter status = 429 | stats count(*) by bin(5m)` — surfaces throttling patterns. Dashboard shows all three.
 
-**MH-SEC:** Config rule `dynamodb-table-encrypted-at-rest` against the redeployed DynamoDB transactions table. Auto-remediation via Lambda enables SSE-KMS on the table. Security Hub: 2 HIGH findings documented. KMS CMK `alias/fintech-dynamodb-prod` applied to the redeployed DynamoDB table. Security-cost statement: "Security Hub costs approximately $0.001 per resource evaluation per month — negligible for 40 resources. The unified finding view is worth more than its cost in a multi-service account."
+**MH-SEC:** Self-Healing Security Guard — a Lambda that detects a Security Group ingress rule opened to `0.0.0.0/0` on port 22 and calls `RevokeSecurityGroupIngress`; least-privilege role limited to `ec2:RevokeSecurityGroupIngress` / `ec2:DescribeSecurityGroups`. Trigger: EventBridge rule on the `AuthorizeSecurityGroupIngress` CloudTrail event. Demo loop: intentionally add an open-SSH rule → before screenshot (0.0.0.0/0 on 22) → Lambda revokes it → after screenshot (rule gone) → CloudTrail shows `RevokeSecurityGroupIngress`. Supporting control: account-level S3 Block Public Access ON + a bucket policy denying non-TLS PutObject (`aws:SecureTransport=false`), shown with a denied test call. Security-cost statement: "Account-level S3 Block Public Access and the deny policy cost nothing — they only constrain misconfigurations, and the avoided blast radius of a public financial-data bucket far outweighs the zero spend."
 
 ---
 
@@ -260,7 +271,7 @@ W3 design: Aurora PostgreSQL with pgvector, Bedrock KB. W4: Bedrock Agent with L
 
 **MH-OBS:** Custom metric `bedrock_agent_invocation_count` and `bedrock_agent_latency_ms` from the redeployed orchestrator Lambda. Alarm on Aurora ACU Utilization — auto-scales; alarm fires when ACU > 8. Log Insights against the agent Lambda: `filter @message like /CITATION/ | stats count(*) as citation_count by bin(1h)` — tracks retrieval quality.
 
-**MH-SEC:** Config rule `s3-bucket-server-side-encryption-enabled` against the redeployed corpus bucket. Auto-remediation: SSM Automation applies SSE-KMS. KMS CMK `alias/legalbot-aurora-prod` applied to the Aurora PostgreSQL instance. CloudTrail: `kms:GenerateDataKey` from `rds.amazonaws.com` confirms active encryption of the embedding store. Security-cost statement: "SSE-KMS with CMK costs $1/month per key. Justified because legal document contents require an auditable access trail — knowing which IAM principal triggered a decrypt is a compliance requirement, not a preference."
+**MH-SEC:** Self-Healing Security Guard — a Lambda that detects the corpus S3 bucket being made public and calls `PutPublicAccessBlock`; least-privilege role limited to `s3:PutPublicAccessBlock` / `s3:GetBucketPolicyStatus`. Trigger: EventBridge Scheduler daily cron (same reliable mechanism as the Cost Guard) as the fallback path. Demo loop: intentionally make the corpus bucket public → before screenshot (public) → scheduled Lambda fixes it → after screenshot (Block Public Access on) → CloudTrail shows `PutPublicAccessBlock`. Supporting control: KMS CMK `alias/legalbot-aurora-prod` applied to the Aurora PostgreSQL instance; CloudTrail `kms:GenerateDataKey` from `rds.amazonaws.com` confirms active encryption of the embedding store. Security-cost statement: "SSE-KMS with CMK costs $1/month per key. Justified because legal document contents require an auditable access trail — knowing which IAM principal triggered a decrypt is a compliance requirement, not a preference."
 
 ---
 
@@ -282,7 +293,7 @@ Your slides must link to `docs/W6_evidence.md` (repo link or commit hash). Post 
 
 **Section 4 — MH-OBS — CloudWatch Observability:** Dashboard screenshot with all three widget types labeled (custom metric widget title called out explicitly). The `PutMetricData` code snippet from your application. Alarm configuration screenshot (metric name, threshold, evaluation period, action destination). Log Insights query screenshot showing the query text + the log group it runs against + at least 5 result rows. Saved query name visible in the Saved Queries list.
 
-**Section 5 — MH-SEC — Security via Config:** Config recording enabled screenshot. Config rule deployment + compliance dashboard showing real evaluation results. Auto-remediation evidence: before (Non-Compliant) screenshot + after (Compliant) screenshot + CloudTrail remediation event. Supporting control chosen (KMS CMK or Security Hub) + option-specific evidence. Security threat paragraph: what threat the Config rule addresses, what the blast radius is if the rule is absent. Security-cost trade-off statement.
+**Section 5 — MH-SEC — Self-Healing Security Guard:** Lambda code/config screenshot + least-privilege IAM role + the trigger (EventBridge rule on the CloudTrail/API event OR EventBridge Scheduler daily cron). Demonstrated detect→fix loop: before (insecure) screenshot + after (remediated) screenshot + the CloudTrail event of the fix API call (`RevokeSecurityGroupIngress` / `PutPublicAccessBlock`). Supporting preventive control chosen (KMS CMK, account-level S3 Block Public Access + deny policy, or IAM Access Analyzer) + option-specific evidence. Security threat paragraph: what misconfiguration the guard fixes and what the blast radius is if it is left unremediated. Security-cost trade-off statement.
 
 **Section 6 — Project Recap:** A short written recap of the project — what the application is, its business domain, and the key architecture and design decisions carried forward from W1-W5. This is the context for your W6 operational work; it is not an app-action proof or a diagram-update requirement. If you addressed any W5 feedback, note it briefly — optional, not separately scored.
 
@@ -300,7 +311,7 @@ By the end of your presentation, trainers should be able to verify all of the fo
 
 **MH-OBS — CloudWatch:** Trainer opens your CloudWatch dashboard and sees your application-layer custom metric with real data points (not empty widgets). Alarm is in OK or ALARM state, not INSUFFICIENT_DATA. Log Insights query returns real results from your redeployed API Gateway or Lambda log group.
 
-**MH-SEC — Security via Config:** Trainer checks the Config compliance dashboard — at least one rule is evaluating at least three resources from your redeployed stack. Trainer reviews your auto-remediation before/after screenshots and the CloudTrail remediation execution event. For KMS path: trainer finds `kms:GenerateDataKey` or `kms:Decrypt` events from your application's redeployed data store. For Security Hub path: trainer reads the two HIGH/MEDIUM findings and your triage decisions.
+**MH-SEC — Self-Healing Security Guard:** Trainer watches (or reviews evidence of) the loop: a violation is created on the redeployed stack, the Lambda detects and fixes it, and the CloudTrail event of the fix API call (`RevokeSecurityGroupIngress` / `PutPublicAccessBlock`) confirms the remediation ran — with before/after screenshots. For the KMS supporting control: trainer finds `kms:GenerateDataKey` or `kms:Decrypt` events from your application's redeployed data store. For the S3 Block Public Access path: trainer sees account-level BPA on and the denied test call. For the IAM Access Analyzer path: trainer reads the external-access finding and your triage decision.
 
 That is what "done" means. Your Evidence Pack makes all of it verifiable after you leave the room.
 
@@ -328,7 +339,7 @@ For groups that complete all four must-haves and the Evidence Pack before Thursd
 
 - **GuardDuty sample findings investigation** — Generate sample findings using `CreateSampleFindings` API and walk through the full EventBridge → SNS → Lambda response chain.
 
-- **CloudFormation template for one W6 resource** — Write a CFN template provisioning a Config rule with remediation. Pass `aws cloudformation validate-template`. Proves infrastructure-as-code discipline for W7.
+- **CloudFormation template for one W6 resource** — Write a CFN template provisioning your Self-Healing Security Guard (the Lambda + its EventBridge trigger + the least-privilege IAM role). Pass `aws cloudformation validate-template`. Proves infrastructure-as-code discipline for W7.
 
 ---
 
@@ -344,11 +355,11 @@ Same four-part format. Target 10-12 minutes total.
 - **Cost visibility layer (MH-COST-V):** tags applied to redeployed resources, Cost Explorer view filtered by tag, baseline breakdown, top-3-cost-drivers observation
 - **Cost control layer (MH-COST-A):** automated cost guard demo (Lambda + daily EventBridge schedule + Budgets daily $150→SNS, a real resource stopped with CloudTrail evidence)
 - **Monitoring layer:** CloudWatch dashboard with custom metric + alarm + saved Log Insights query
-- **Security layer:** Config rule + auto-remediation event in CloudTrail + KMS or Security Hub supporting evidence
+- **Security layer (MH-SEC):** Self-Healing Security Guard — Lambda + trigger, the demonstrated detect→fix loop with the CloudTrail event of the fix API call (`RevokeSecurityGroupIngress` / `PutPublicAccessBlock`) and before/after screenshots, plus the chosen supporting preventive control
 
 **Part 3 — Individual QnA (~3 min):** Trainers will ask individual questions about your architecture and decisions. These are questions about what you built, why you chose each path, and what you would do differently in production. If you understand your own work, you will handle them confidently.
 
-**Part 4 — Deployment Demo (~3-4 min):** Walk through the live evidence per MH: Cost Explorer filtered to your project with baseline breakdown (MH-COST-V); the automated cost guard demo — Lambda + daily EventBridge schedule + Budgets daily $150→SNS, a real resource stopped with CloudTrail evidence (MH-COST-A); CloudWatch dashboard with custom metric and alarm state; Config compliance dashboard with auto-remediation evidence plus KMS CloudTrail event or Security Hub findings page; application end-to-end action. If a live demo step fails, the Evidence Pack screenshot for that step is an acceptable substitute with no penalty — but missing both live and screenshot for a claim caps that MH's score.
+**Part 4 — Deployment Demo (~3-4 min):** Walk through the live evidence per MH: Cost Explorer filtered to your project with baseline breakdown (MH-COST-V); the automated cost guard demo — Lambda + daily EventBridge schedule + Budgets daily $150→SNS, a real resource stopped with CloudTrail evidence (MH-COST-A); CloudWatch dashboard with custom metric and alarm state; the Self-Healing Security Guard detect→fix loop with the CloudTrail event of the fix API call (`RevokeSecurityGroupIngress` / `PutPublicAccessBlock`) plus the chosen supporting preventive control evidence (MH-SEC); application end-to-end action. If a live demo step fails, the Evidence Pack screenshot for that step is an acceptable substitute with no penalty — but missing both live and screenshot for a claim caps that MH's score.
 
 ---
 
