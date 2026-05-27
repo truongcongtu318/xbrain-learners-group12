@@ -9,7 +9,14 @@ const demoUser: User = {
   avatarInitials: 'TT'
 };
 
-const now = () => new Date().toISOString();
+const FIXED_TIMESTAMP = '2026-05-27T00:00:00.000Z';
+
+let uploadCounter = 0;
+let qaCounter = 0;
+
+const now = () => FIXED_TIMESTAMP;
+const nextUploadId = () => `doc-upload-${++uploadCounter}`;
+const nextQaId = () => `qa-${++qaCounter}`;
 
 const documents = new Map<string, StudyDocument>();
 
@@ -37,7 +44,7 @@ class MockAuthProvider implements AuthProvider {
 
 class MockDocumentProvider implements DocumentProvider {
   async createUploadSession(_user: User, filename: string, contentType: string): Promise<UploadSession> {
-    const id = `doc-${crypto.randomUUID()}`;
+    const id = nextUploadId();
     const document: StudyDocument = {
       id,
       filename,
@@ -90,7 +97,7 @@ class MockStudyProvider implements StudyProvider {
   async askQuestion(_user: User, documentId: string, question: string): Promise<QuestionAnswer> {
     if (!documents.has(documentId)) throw new ApiError('DOCUMENT_NOT_FOUND', 'Document not found.', 404);
     return {
-      id: `qa-${crypto.randomUUID()}`,
+      id: nextQaId(),
       question,
       answer: 'Based on your lecture, the key idea is to connect the learning objective to evidence from the slides: define the concept, explain how it is used, and cite the source slide when answering exam-style questions.',
       citations,
