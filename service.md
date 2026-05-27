@@ -1,90 +1,258 @@
 # Đề xuất dịch vụ AWS cho W7 EduTech - AI Study Buddy
 
-Mục tiêu: chọn kiến trúc **production-ready cho W7 hackathon**, chi phí thấp, có đủ 7 yêu cầu bắt buộc, có optional capability để kéo điểm, và vẫn nói rõ những khoảng cách nếu đưa lên production SaaS thật.
+Mục tiêu: chọn kiến trúc **production-ready cho W7 hackathon**, chi phí thấp, đáp ứng đủ 7 mandatory capabilities, bám sát Domain A EduTech, có optional capability để kéo điểm, và giải thích rõ vì sao chọn luồng Bedrock Knowledge Base + S3 Vectors thay vì tự làm retrieval bằng DynamoDB.
 
 ## Hướng chọn tổng thể
 
-Chọn **EduTech - AI Study Buddy** với kiến trúc **serverless, cost-aware, production-oriented**:
+Chọn **EduTech - AI Study Buddy** với kiến trúc **serverless + Bedrock Knowledge Base + S3 Vectors**:
 
 - Frontend tĩnh: S3 + CloudFront.
 - API entry: API Gateway HTTP API.
-- Backend: Lambda.
-- AI: Amazon Bedrock InvokeModel, ưu tiên Claude Haiku hoặc model rẻ đủ chất lượng sau benchmark.
-- Database: DynamoDB on-demand.
-- File storage: S3 private bucket.
+- Backend/API orchestration: Lambda.
+- AI/RAG chính: Amazon Bedrock Knowledge Base + S3 Vectors.
+- Generation model: Claude Haiku hoặc model rẻ đủ chất lượng sau benchmark.
+- Embedding model: Titan Text Embeddings v2 hoặc embedding model được Bedrock KB support.
+- Data persistence: DynamoDB on-demand.
+- Object storage: S3 private bucket.
 - Upload path: API tạo S3 presigned URL, browser upload trực tiếp lên S3.
-- Ingestion: S3 upload event kích hoạt Lambda xử lý extraction/chunking, lưu trạng thái vào DynamoDB.
-- PDF extraction MVP: pypdf/pdfplumber trước, fallback Textract hoặc Tesseract khi text density thấp hoặc gặp slide scan/table.
-- Retrieval MVP: chunk text lưu DynamoDB, truy hồi lexical/keyword top-k, đưa context vào Bedrock.
-- Retrieval production target: Bedrock Knowledge Base + S3 Vectors nếu region hỗ trợ và team có thời gian benchmark.
+- KB ingestion input: Bedrock KB chỉ ingest từ prefix `kb-input/`.
+- PDF preprocessing: pypdf/pdfplumber kiểm tra chất lượng text trước ingestion; Textract/Tesseract chỉ là fallback khi PDF scan/table/image-heavy.
+- Retrieval: Bedrock KB retrieve từ S3 Vectors; không tự lưu chunks vào DynamoDB trong path chính.
 - Không dùng OpenSearch Serverless / RDS / NAT Gateway trong bản demo đầu tiên để tránh fixed cost và giảm rủi ro.
 
-**Định vị dùng để trình bày:** đây là production-ready theo bar W7: live URL, AI thật, persistent state, IAM least privilege, monitoring, cost discipline. Chưa phải production SaaS đầy đủ; những gap còn lại là auth hoàn chỉnh, semantic retrieval, async retry/DLQ sâu hơn, và tenant isolation nghiêm ngặt hơn.
+**Định vị dùng để trình bày:** đây là production-ready theo bar W7: live URL, AI thật, persistent state, IAM least privilege, monitoring, cost discipline, và RAG AWS-native. Chưa phải production SaaS đầy đủ; những gap còn lại là auth hoàn chỉnh, retry/DLQ sâu hơn, tenant isolation nghiêm ngặt hơn, CI/CD và rollback.
+
+## Vì sao dùng Bedrock KB + S3 Vectors, không tự làm DynamoDB lexical retrieval?
+
+Domain A không chỉ yêu cầu “upload PDF rồi hỏi đáp”, mà yêu cầu **Document Intelligence**: citation về slide, retrieval quality measurement, conscious chunking decision, và failure mode mitigation. Vì vậy path chính nên dùng dịch vụ sinh ra cho RAG thay vì tự làm keyword search đơn giản.
+
+| Lựa chọn | Vì sao chọn / không chọn |
+|---|---|
+| **Bedrock KB + S3 Vectors** | Chọn làm path chính. Bedrock KB xử lý parsing/chunking/embedding/retrieval; S3 Vectors là vector store AWS-managed, không có fixed OCU như OpenSearch Serverless. Dễ defend là kiến trúc RAG production-oriented. |
+| DynamoDB lexical retrieval | Không chọn làm path chính vì lexical search dễ miss câu hỏi paraphrase, khó chứng minh semantic retrieval quality, và phải tự viết nhiều logic chunk/retrieve/citation. Chỉ giữ làm fallback khẩn cấp nếu KB setup bị block trong 48h. |
+| OpenSearch Serverless | Không chọn cho W7 vì có fixed OCU cost, dễ thành cost driver lớn nhất, trong khi S3 Vectors đủ cho demo và rẻ hơn. |
+| Textract everywhere | Không chọn mặc định vì pure-text slides sẽ overpay. Chỉ dùng fallback khi pypdf/pdfplumber cho thấy text density thấp hoặc slide scan/table khó đọc. |
 
 ## Mapping 7 mandatory capabilities
 
 | W7 requirement | Dịch vụ đề xuất | Lý do |
 |---|---|---|
 | 1. User Interface / Entry | S3 static hosting + CloudFront HTTPS + API Gateway HTTP API | CloudFront cho public HTTPS URL rẻ và nhanh. API Gateway HTTP API rẻ hơn REST API, đủ cho demo backend. |
-| 2. Application Compute | AWS Lambda | Serverless, không tốn tiền khi idle, phù hợp request/response và ingestion workload nhỏ. |
-| 3. AI / ML Feature | Amazon Bedrock InvokeModel | Dùng AI thật từ app. Hỗ trợ summary, Q&A, quiz/flashcard generation. |
-| 4. Data Persistence | DynamoDB on-demand | Lưu user state, document metadata, chunk text, quiz history, ingestion status. Chi phí rất thấp với demo traffic. |
-| 5. Object Storage | S3 private bucket | Lưu PDF/TXT upload và file gốc. Bật Block Public Access và SSE-S3 hoặc SSE-KMS. |
-| 6. Network Foundation | VPC tối giản + VPC endpoints nếu Lambda đặt trong VPC; không dùng NAT Gateway | Không có DB public-facing. DynamoDB/S3 được bảo vệ bằng IAM; nếu dùng VPC thì đi qua Gateway Endpoint cho S3/DynamoDB và Interface Endpoint cho Bedrock. |
+| 2. Application Compute | AWS Lambda | Serverless, không tốn tiền khi idle, phù hợp API orchestration, upload session, preprocessing, ingestion status, và Bedrock calls. |
+| 3. AI / ML Feature | Bedrock Knowledge Base + S3 Vectors + Bedrock generation model | Dùng AI thật từ app. Hỗ trợ RAG Q&A, citations, study guide, flashcards, quiz. |
+| 4. Data Persistence | DynamoDB on-demand | Lưu user state, document metadata, ingestion status, study guide, flashcards, quiz history, studied topics. Không lưu retrieval chunks trong path chính. |
+| 5. Object Storage | S3 private bucket | Lưu raw PDF và normalized KB input. Bật Block Public Access và SSE-S3 hoặc SSE-KMS. |
+| 6. Network Foundation | Managed services + IAM isolation; VPC endpoints nếu cần hardening | DynamoDB/S3/Bedrock không có DB public-facing như RDS. Access qua IAM least privilege; nếu cần network foundation sâu hơn thì Lambda đặt trong VPC và dùng endpoints, không cần NAT Gateway. |
 | 7. Identity & Access | IAM least privilege + Cognito/JWT nếu kịp; demo fallback bằng test user | IAM least privilege là bắt buộc. Cognito + JWT authorizer production hơn, nhưng W7 cho phép cắt scope bằng demo user nếu thiếu thời gian. |
 
 ## Domain A EduTech requirements coverage
 
 | Domain A yêu cầu | Cách đáp ứng trong thiết kế |
 |---|---|
-| Upload lecture slides | User upload PDF/TXT qua S3 presigned URL; file gốc lưu trong S3 private bucket. |
-| One-page study guide với 5 concepts dễ ra thi nhất | Lambda lấy chunks đã xử lý, gọi Bedrock tạo summary một trang và đúng 5 ý chính. |
-| Flashcard set | Bedrock sinh danh sách flashcards dạng `front/back`, lưu vào DynamoDB để mở lại sau. |
-| Quiz | Bedrock sinh **10 câu multiple-choice** từ uploaded notes, có đáp án đúng và giải thích ngắn. |
-| Q&A có citation về slide cụ thể | Mỗi chunk lưu `slide_number`, `doc_id`, `chunk_id`; câu trả lời phải kèm citation như `slide 12, chunk 3`. |
-| Track topics studied this week | DynamoDB lưu `StudiedTopic`/`StudyEvent` theo `user_id`, `topic`, `doc_id`, `week_start`; dashboard query theo tuần hiện tại. |
-| Document intelligence khó hơn store/retrieve PDF | Extraction pipeline xử lý text, table-like blocks, figure captions nếu extract được, và fallback OCR/Textract cho slide scan/text density thấp. |
+| Upload lecture slides | User upload PDF qua S3 presigned URL; bản gốc lưu ở `raw/`, bản cho KB ingest nằm ở `kb-input/`. |
+| One-page study guide với 5 concepts dễ ra thi nhất | Lambda dùng Retrieve hoặc RetrieveAndGenerate từ KB, rồi gọi generation model tạo study guide đúng 5 ý chính. |
+| Flashcard set | Lambda dùng chunks retrieved từ KB để sinh flashcards dạng `front/back`, lưu DynamoDB để mở lại sau. |
+| Quiz | Lambda sinh **10 câu multiple-choice** từ nội dung retrieved, có đáp án đúng và giải thích ngắn. |
+| Q&A có citation về slide cụ thể | KB trả retrieval citations; file markdown fallback giữ marker `Slide N`. Nếu ingest raw PDF, kiểm tra citation output trong probe questions và ghi evidence. |
+| Track topics studied this week | DynamoDB lưu `StudyEvent` theo `user_id`, `topic`, `doc_id`, `week_start`; dashboard query theo tuần hiện tại. |
+| Document intelligence khó hơn store/retrieve PDF | Preprocessing Lambda đo text density, quyết định raw PDF hay normalized markdown trước khi KB ingest. Đây là bước chứng minh team hiểu chất lượng input, không chỉ upload PDF vào KB một cách mù quáng. |
 | Measured retrieval quality | Evidence Pack ghi precision@k hoặc response-relevance Likert trên ít nhất 5 probe questions từ chính lecture file demo. |
-| Conscious chunking decision | Benchmark chunk 500-800 tokens, lưu overlap và đo top-k relevance/latency để bảo vệ quyết định. |
-| Failure mode discovered + mitigated | Ghi ít nhất một query bị sai, ví dụ câu hỏi về hình/table bị lexical retrieval miss; mitigation là thêm caption/table extraction, tăng overlap, hoặc fallback Textract/OCR. |
+| Conscious chunking decision | Chọn chunking strategy của Bedrock KB trước khi tạo data source; nếu slide có bảng/hình phức tạp thì cân nhắc advanced parsing. Ghi trade-off và measurement. |
+| Failure mode discovered + mitigated | Ghi ít nhất một query bị sai, ví dụ câu hỏi về bảng/hình bị retrieve sai; mitigation là dùng normalized markdown, thêm slide markers, hoặc fallback Textract/OCR. |
+
+## S3 prefix strategy
+
+Dùng một bucket private, tách prefix rõ ràng:
+
+```text
+s3://studybot-docs/raw/{user_id}/{doc_id}/lecture.pdf
+s3://studybot-docs/kb-input/{user_id}/{doc_id}/lecture.pdf
+s3://studybot-docs/kb-input/{user_id}/{doc_id}/lecture.md
+```
+
+Quy tắc:
+
+- `raw/` là bản gốc để audit, download, debug extraction.
+- `kb-input/` là **prefix duy nhất** Bedrock KB được phép ingest.
+- Nếu PDF quality OK: copy raw PDF sang `kb-input/{user_id}/{doc_id}/lecture.pdf`.
+- Nếu PDF quality poor: tạo normalized `.md` hoặc `.txt`, upload sang `kb-input/{user_id}/{doc_id}/lecture.md`.
+- Không để KB ingest cả `raw/` và `kb-input/` để tránh duplicate chunks.
+
+Câu defend:
+
+> Raw/ là bản gốc để audit và download. kb-input/ là bản duy nhất Bedrock KB ingest. Nếu PDF tốt thì kb-input chứa bản PDF gốc copy sang; nếu PDF kém thì kb-input chứa Markdown đã normalize. Cách này tránh duplicate ingestion và giúp kiểm soát chất lượng dữ liệu đưa vào RAG.
 
 ## AI flow để demo
 
-1. User vào CloudFront URL và chọn lecture PDF/TXT.
+1. User vào CloudFront URL và chọn lecture PDF.
 2. Frontend gọi API Gateway `POST /uploads` để tạo upload session.
-3. Lambda tạo `doc_id`, ghi metadata DynamoDB với status `UPLOADING`, và trả về S3 presigned URL.
-4. Browser upload file trực tiếp lên S3 private bucket bằng presigned URL.
-5. S3 object-created event kích hoạt ingestion Lambda.
-6. Ingestion Lambda cập nhật status `PROCESSING`, extract text, đo text density theo từng slide/page, fallback OCR/Textract cho slide scan hoặc bảng/hình khó đọc.
-7. Lambda chia chunk 500-800 tokens, có overlap nhỏ và giữ metadata citation.
-8. Metadata và chunks lưu vào DynamoDB:
+3. Lambda tạo `doc_id`, ghi DynamoDB status `UPLOADING`, và trả về S3 presigned URL trỏ tới `raw/{user_id}/{doc_id}/lecture.pdf`.
+4. Browser upload file trực tiếp lên S3 private bucket.
+5. S3 `ObjectCreated` event kích hoạt preprocessing Lambda.
+6. Preprocessing Lambda cập nhật status `CHECKING_EXTRACTION`, chạy pypdf/pdfplumber để đo text quality:
+   - `avg_chars_per_page`
+   - `empty_pages_ratio`
+   - `table_detected`
+   - `scan_or_image_heavy`
+7. Lambda chọn source cho KB:
+   - Nếu PDF text quality OK: copy raw PDF sang `kb-input/{user_id}/{doc_id}/lecture.pdf`.
+   - Nếu PDF text quality poor: fallback pypdf/pdfplumber/Textract/Tesseract, tạo `lecture.md` hoặc `lecture.txt`, upload sang `kb-input/{user_id}/{doc_id}/lecture.md`.
+8. Lambda lưu DynamoDB metadata:
    - `PK = USER#<user_id>`
-   - `SK = DOC#<doc_id>` cho metadata
-   - `SK = DOC#<doc_id>#CHUNK#<chunk_id>` cho chunk
-   - `slide_number`, `chunk_id`, `section_title`, `text_density`
-   - `status = UPLOADING | PROCESSING | READY | FAILED`
-9. Frontend poll `GET /documents/{doc_id}` đến khi status `READY`.
-10. Khi user hỏi câu hỏi:
-   - Lambda query chunks của user/doc từ DynamoDB.
-   - Tính điểm keyword/lexical match.
-   - Chọn top 3-5 chunks làm context.
-   - Gọi Bedrock InvokeModel để trả lời dựa trên context.
-   - Prompt bắt buộc model trả lời kèm citation về `slide_number` và `chunk_id`.
-11. Khi user tạo study guide/flashcards/quiz:
-   - Lambda dùng chunks đã chọn hoặc toàn bộ outline để gọi Bedrock.
+   - `SK = DOC#<doc_id>`
+   - `raw_s3_key`
+   - `kb_source_key`
+   - `extraction_strategy = RAW_PDF | PYPDF_MARKDOWN | TEXTRACT_MARKDOWN`
+   - `avg_chars_per_page`, `empty_pages_ratio`, `fallback_pages`
+   - `status = READY_FOR_KB_INGESTION`
+9. Lambda gọi Bedrock `StartIngestionJob` cho Knowledge Base data source scoped vào `kb-input/`.
+10. Frontend poll `GET /documents/{doc_id}`; Lambda poll/get ingestion status và cập nhật DynamoDB `INGESTING | READY | FAILED`.
+11. Khi user hỏi câu hỏi:
+   - Lambda kiểm tra document status `READY`.
+   - Lambda gọi Bedrock KB `RetrieveAndGenerate` để lấy answer + citations.
+   - Nếu cần prompt/citation control tốt hơn, Lambda gọi `Retrieve` trước rồi gọi Bedrock Converse với custom prompt.
+   - Q&A event được ghi vào DynamoDB.
+12. Khi user tạo study guide/flashcards/quiz:
+   - Lambda dùng `Retrieve` để lấy context từ KB.
+   - Lambda gọi Bedrock Converse/InvokeModel với prompt riêng.
    - Study guide trả về đúng 5 concepts dễ ra thi nhất.
    - Flashcards trả về danh sách question/answer cards.
    - Quiz trả về 10 câu multiple-choice, đáp án đúng, và giải thích ngắn.
-12. Kết quả trả về UI và được ghi vào DynamoDB để chứng minh persistent state và dashboard theo tuần.
+   - Kết quả lưu DynamoDB để mở lại và hiển thị dashboard.
+13. Dashboard tuần này query DynamoDB `StudyEvent` để hiển thị topics đã học.
+
+## DynamoDB data model
+
+DynamoDB không lưu retrieval chunks trong path chính. Nó chỉ lưu metadata, status, và sản phẩm học tập.
+
+```text
+PK = USER#<user_id>
+SK = DOC#<doc_id>
+  doc_id
+  raw_s3_key
+  kb_source_key
+  status
+  extraction_strategy
+  kb_ingestion_job_id
+  avg_chars_per_page
+  empty_pages_ratio
+  created_at
+
+PK = USER#<user_id>
+SK = STUDY_GUIDE#<doc_id>
+  content
+  generated_at
+
+PK = USER#<user_id>
+SK = FLASHCARDS#<doc_id>
+  cards[]
+  generated_at
+
+PK = USER#<user_id>
+SK = QUIZ#<doc_id>
+  questions[]
+  generated_at
+
+PK = USER#<user_id>
+SK = STUDY_EVENT#<week_start>#<timestamp>
+  topic
+  doc_id
+  activity
+```
+
+## Short-term memory và long-term memory
+
+Trong kiến trúc này, cần tách rõ hai loại dữ liệu:
+
+- **Bedrock KB + S3 Vectors** là document knowledge index: dùng để retrieve kiến thức từ lecture slides.
+- **DynamoDB** là app memory: dùng để lưu trạng thái học tập, session, lịch sử, quiz, flashcards, và dashboard của user.
+
+Vì vậy phần memory của app sẽ lưu trong **DynamoDB**, không lưu trong S3 Vectors.
+
+### Short-term memory
+
+Short-term memory là context của phiên học hiện tại. Dùng để làm trải nghiệm chat/study mượt hơn và giúp user quay lại session gần nhất.
+
+Ví dụ DynamoDB item:
+
+```text
+PK = USER#<user_id>
+SK = SESSION#<session_id>
+  current_doc_id
+  active_topic
+  recent_questions[]
+  recent_answers[]
+  last_activity_at
+  ttl
+```
+
+Dữ liệu nên lưu:
+
+- document user đang học;
+- 5-10 câu hỏi/trả lời gần nhất;
+- topic đang học;
+- quiz/flashcard đang mở;
+- thời điểm hoạt động cuối cùng.
+
+Có thể đặt TTL 1-7 ngày để tự dọn session cũ.
+
+### Long-term memory
+
+Long-term memory là hồ sơ học tập lâu dài của user. Đây là phần giúp đáp ứng user story Domain A: **track which topics have been studied this week in a personal dashboard**.
+
+Ví dụ DynamoDB item theo topic:
+
+```text
+PK = USER#<user_id>
+SK = MEMORY#TOPIC#<topic_id>
+  topic_name
+  last_studied_at
+  times_reviewed
+  quiz_attempts
+  average_score
+  weak_points[]
+  source_doc_ids[]
+```
+
+Ví dụ DynamoDB event log:
+
+```text
+PK = USER#<user_id>
+SK = STUDY_EVENT#<week_start>#<timestamp>
+  doc_id
+  topic
+  activity = ask | study_guide | flashcard | quiz
+  score
+  created_at
+```
+
+Dữ liệu nên lưu:
+
+- topics đã học trong tuần;
+- quiz scores theo topic;
+- flashcard progress;
+- weak topics;
+- study history;
+- uploaded documents;
+- study guide/quiz/flashcard outputs đã generate.
+
+### Vì sao không dùng Bedrock Agent Memory?
+
+Không nên dùng Bedrock Agent Memory cho W7 vì tăng complexity và không bắt buộc. DynamoDB đủ để chứng minh persistent state, short-term session memory, và long-term learning memory trong 48h.
+
+Câu defend:
+
+> RAG knowledge nằm trong Bedrock KB + S3 Vectors. User/application memory nằm trong DynamoDB. Short-term memory lưu session context và recent Q&A; long-term memory lưu study events, weak topics, quiz scores, flashcard progress. Chúng em tách knowledge retrieval khỏi user learning memory để dễ kiểm soát privacy, cost, và persistence.
 
 ## Feature nên demo
 
 Minimum happy path:
 
-- Upload lecture note bằng presigned URL.
-- Thấy trạng thái document chuyển từ `PROCESSING` sang `READY`.
+- Upload lecture PDF bằng presigned URL.
+- Preprocessing quyết định `RAW_PDF` hoặc `PYPDF_MARKDOWN/TEXTRACT_MARKDOWN`.
+- Bedrock KB ingestion hoàn tất, document chuyển sang `READY`.
+- Chat/Q&A dựa trên KB, có citation.
 - Tạo one-page study guide với 5 concepts dễ ra thi nhất.
-- Chat/Q&A dựa trên nội dung đã upload, có citation về slide cụ thể.
 - Tạo flashcard set từ lecture.
 - Tạo quiz **10 câu** multiple-choice từ uploaded notes.
 - Dashboard hiển thị topics đã học trong tuần này.
@@ -93,7 +261,7 @@ Minimum happy path:
 Custom feature để có điểm Criterion I:
 
 - **Quiz generation theo mức độ khó**: easy / medium / hard.
-- **Retrieval quality panel**: show 5 probe questions, expected slide, retrieved slide, và relevance score để chứng minh measurement.
+- **Retrieval quality panel**: show 5 probe questions, expected slide, retrieved citation, và relevance score để chứng minh measurement.
 
 ## Optional capability nên chọn
 
@@ -111,30 +279,36 @@ Cần làm:
 - CloudWatch dashboard có ít nhất:
   - Lambda invocations/errors/duration.
   - API Gateway 4xx/5xx.
-  - Bedrock request count custom metric.
+  - Bedrock KB ingestion started/succeeded/failed.
+  - Bedrock retrieve/generate request count.
   - Document upload count custom metric.
-  - Ingestion failures custom metric.
+  - Preprocessing fallback count.
 - Custom metrics từ Lambda:
   - `DocumentsUploaded`
-  - `DocumentsProcessed`
+  - `PreprocessSucceeded`
+  - `PreprocessFallbackUsed`
+  - `KBIngestionStarted`
+  - `KBIngestionSucceeded`
+  - `KBIngestionFailed`
   - `QuestionsAsked`
-  - `BedrockCalls`
+  - `StudyGuidesGenerated`
+  - `FlashcardsGenerated`
   - `QuizGenerated`
-  - `IngestionFailed`
 - Alarm:
   - Lambda errors > 0 trong 5 phút, hoặc
   - API 5xx > 0, hoặc
-  - `IngestionFailed` > 0.
+  - `KBIngestionFailed` > 0.
 - Log Insights query:
   - tìm lỗi trong Lambda logs.
   - thống kê số request theo endpoint.
-  - lọc theo `correlation_id` hoặc `doc_id`.
+  - lọc theo `correlation_id`, `doc_id`, hoặc `kb_ingestion_job_id`.
 - Log retention: đặt retention 7-14 ngày, không để unlimited.
 
 Production best practice nếu có thời gian:
 
 - Structured JSON logs.
 - Correlation ID từ API request đến Lambda logs.
+- CloudTrail evidence cho Bedrock KB ingestion calls.
 - Embedded Metric Format/Powertools nếu team dùng Python/TypeScript quen tay; nếu không, `PutMetricData` vẫn đủ cho W7 evidence.
 
 ## Bonus nên nhắm tới
@@ -144,8 +318,8 @@ Nên chọn 2 bonus khả thi:
 | Bonus | Có nên làm? | Lý do |
 |---|---:|---|
 | E. IaC full coverage | Nên | Dùng SAM/CloudFormation. Không tăng cost, tăng điểm architecture/QnA, dễ teardown. |
-| H. Tổng chi phí < $30 + teardown sạch | Nên | Kiến trúc serverless này có khả năng dưới $30 rất cao nếu không dùng NAT/OpenSearch/RDS. |
-| F. AI safety mechanism | Nếu còn thời gian | Có thể làm prompt guard/custom filter đơn giản, không cần thêm service. |
+| H. Tổng chi phí < $30 + teardown sạch | Nên | S3 Vectors tránh fixed OCU của OpenSearch Serverless, phù hợp cost discipline. |
+| F. AI safety mechanism | Nếu còn thời gian | Có thể làm prompt guard/custom filter đơn giản, hoặc Bedrock Guardrails nếu setup kịp. |
 | C. Custom domain + HTTPS | Không ưu tiên | CloudFront default HTTPS đã đủ mandatory; custom domain mất thêm thời gian DNS/ACM. |
 | A. Multi-region failover | Không nên | Quá nặng cho 48h. |
 
@@ -155,18 +329,19 @@ Những dịch vụ nên tránh:
 
 - **NAT Gateway**: có fixed hourly cost và data processing cost. Chỉ dùng nếu bắt buộc.
 - **OpenSearch Serverless**: có minimum OCU, dễ thành fixed cost lớn nhất của project.
-- **RDS**: có hourly cost, cần subnet/security/connection management. DynamoDB đủ cho demo.
+- **RDS**: có hourly cost, cần subnet/security/connection management. DynamoDB đủ cho metadata/demo state.
+- **Textract mọi PDF**: chỉ dùng fallback cho PDF scan/table-heavy; pure-text slide nên để KB ingest raw PDF hoặc dùng pypdf/pdfplumber check nhẹ.
 - **Claude Sonnet trong dev loop**: chỉ dùng nếu Haiku không đạt chất lượng sau khi test.
 
 Những lựa chọn nên dùng:
 
 - API Gateway **HTTP API** thay vì REST API.
 - S3 **presigned URL** cho upload để tránh API Gateway payload limit và giảm Lambda duration.
-- DynamoDB **on-demand**.
-- Lambda memory bắt đầu 512MB; tăng 1024MB nếu PDF parsing chậm và đo lại duration.
+- Bedrock KB + **S3 Vectors** thay vì OpenSearch Serverless nếu region hỗ trợ.
+- DynamoDB **on-demand** cho metadata/status/history.
+- Lambda memory bắt đầu 512MB; tăng 1024MB nếu preprocessing PDF chậm và đo lại duration.
 - S3 + CloudFront cho frontend.
 - Bedrock model rẻ nhất đạt chất lượng, benchmark 5-10 câu hỏi trước khi chốt.
-- S3/DynamoDB Gateway Endpoint nếu Lambda chạy trong VPC; Bedrock Interface Endpoint nếu cần private routing.
 - Xóa resource thừa mỗi ngày.
 - Tag mọi resource:
   - `Project=W7Capstone`
@@ -182,14 +357,17 @@ Bắt buộc nên có:
 
 - S3 bucket Block Public Access.
 - S3 server-side encryption: SSE-S3 là đủ cho W7; SSE-KMS nếu chọn Advanced Security.
-- IAM Lambda role chỉ có quyền cần thiết:
-  - `s3:GetObject`, `s3:PutObject` trên bucket project.
+- Bedrock KB service role chỉ đọc prefix `kb-input/` và chỉ ghi/query đúng S3 Vectors index.
+- Lambda role chỉ có quyền cần thiết:
+  - `s3:GetObject`, `s3:PutObject`, `s3:CopyObject` trên bucket project.
   - `dynamodb:GetItem`, `PutItem`, `Query`, `UpdateItem` trên table project.
-  - `bedrock:InvokeModel` trên model đã chọn.
+  - `bedrock-agent:StartIngestionJob`, `bedrock-agent:GetIngestionJob` trên KB/data source.
+  - `bedrock-agent-runtime:Retrieve`, `RetrieveAndGenerate` trên KB.
+  - `bedrock-runtime:Converse` hoặc `bedrock:InvokeModel` trên model đã chọn nếu dùng custom generation.
   - `cloudwatch:PutMetricData` nếu dùng custom metric.
   - `logs:CreateLogStream`, `logs:PutLogEvents`.
 - Không commit AWS keys.
-- Dùng environment variables cho config không nhạy cảm: table name, bucket name, model id.
+- Dùng environment variables cho config không nhạy cảm: table name, bucket name, KB id, data source id, model id.
 - Không để secret trong environment variables; nếu có secret thì dùng SSM Parameter Store hoặc Secrets Manager.
 - Validate input tại API boundary: file type, file size, user_id/doc_id, prompt length.
 
@@ -200,74 +378,74 @@ Auth khuyến nghị:
 
 ## Decision blocks nên đưa vào Evidence Pack
 
-### Decision 1: Hybrid PDF extraction thay vì Textract mặc định
+### Decision 1: Bedrock KB + S3 Vectors thay vì DynamoDB lexical retrieval
 
-**Decision:** Dùng pypdf/pdfplumber trước cho text-heavy PDFs, fallback Tesseract hoặc Textract khi text density thấp, slide scan, hoặc table/figure caption bị mất.
+**Decision:** Dùng Bedrock Knowledge Base backed by S3 Vectors làm RAG path chính cho Q&A trên lecture slides.
+
+**Alternatives considered:**
+
+- DynamoDB lexical retrieval: rẻ và dễ code, nhưng kém semantic retrieval, dễ miss paraphrase, và phải tự viết chunk/retrieve/citation logic.
+- OpenSearch Serverless vector store: mạnh và phổ biến, nhưng có fixed OCU cost, không tối ưu cho $100 hard cap.
+- Bedrock KB + S3 Vectors: AWS-native, ít code hơn, không có fixed OCU như OpenSearch Serverless, phù hợp hackathon cost discipline.
+
+**Measurement nên thu thập:**
+
+- Precision@k hoặc response-relevance Likert trên ít nhất 5 probe questions.
+- Retrieval citation có trỏ đúng slide/chunk không.
+- Latency p50/p95 cho Q&A.
+- Estimated cost của S3 Vectors vs OpenSearch Serverless trong 48h.
+
+**Trade-off accepted:**
+
+- Setup KB/S3 Vectors cần kiểm tra region availability và IAM kỹ hơn DynamoDB lexical.
+- Đổi lại retrieval production-oriented hơn và dễ defend hơn trong QnA.
+
+### Decision 2: `kb-input/` prefix duy nhất cho KB ingestion
+
+**Decision:** Bedrock KB chỉ ingest từ `kb-input/`, không ingest trực tiếp từ `raw/`.
+
+**Alternatives considered:**
+
+- KB ingest trực tiếp `raw/`: đơn giản hơn khi PDF OK, nhưng dễ duplicate nếu sau đó tạo bản normalized.
+- KB ingest cả `raw/` và `kb-input/`: dễ cấu hình sai, có thể retrieve cả raw và processed version của cùng document.
+- Dùng `kb-input/` duy nhất: rõ ràng, kiểm soát quality tốt, dễ debug và teardown.
+
+**Measurement nên thu thập:**
+
+- Số document trong `kb-input/` bằng số document intended for ingestion.
+- Không có duplicate result trong top-k retrieval.
+- Ingestion success/failure count theo `doc_id`.
+
+**Trade-off accepted:**
+
+- PDF OK cần copy thêm từ `raw/` sang `kb-input/`, tốn thêm một object S3 rất nhỏ.
+- Đổi lại tránh duplicate ingestion và dễ giải thích kiến trúc.
+
+### Decision 3: Hybrid preprocessing thay vì Textract mặc định
+
+**Decision:** Dùng pypdf/pdfplumber để kiểm tra text quality trước; chỉ fallback Textract/Tesseract khi text density thấp hoặc slide scan/table/image-heavy.
 
 **Alternatives considered:**
 
 - Textract cho mọi PDF: mạnh hơn với table/form/scanned pages, nhưng overpay cho pure-text slides và tăng chi phí theo số trang.
 - Bedrock Vision đọc từng slide image: tốt hơn cho diagram/figure-heavy deck, nhưng latency và cost cao cho demo 40-slide.
-- pypdf only: rẻ và nhanh, nhưng fail với image-based slides và bảng/hình phức tạp.
+- Không preprocess: ít code nhất, nhưng khó chứng minh Domain A Core Challenge nếu gặp slide scan/table/figure-heavy.
 
 **Measurement nên thu thập:**
 
-- Text density theo từng slide/page, ví dụ ký tự trên mỗi page.
+- Text density theo từng slide/page.
 - Tỷ lệ page extract sạch bằng pypdf/pdfplumber trên lecture demo.
 - Số page phải fallback OCR/Textract.
-- Extraction latency p50/p95 và estimated cost per upload.
+- Extraction/preprocessing latency p50/p95 và estimated cost per upload.
 
 **Trade-off accepted:**
 
-- Pipeline phức tạp hơn pypdf only.
-- Đổi lại đáp ứng đúng Core Challenge của Domain A: không chỉ store/retrieve PDF, mà có xử lý slide scan/table/figure caption và có measurement.
-
-### Decision 2: Presigned S3 upload thay vì upload file qua API Gateway/Lambda
-
-**Decision:** Dùng S3 presigned URL để browser upload lecture file trực tiếp lên S3 private bucket.
-
-**Alternatives considered:**
-
-- Upload qua API Gateway -> Lambda -> S3: đơn giản hơn để code, nhưng bị giới hạn payload, Lambda giữ connection lâu, và tốn duration cho việc copy file.
-- Public S3 upload bucket: nhanh để demo nhưng sai security baseline vì user có thể ghi document vào bucket nếu policy lỗi.
-
-**Measurement nên thu thập:**
-
-- File size demo lớn nhất, ví dụ 5-10MB PDF.
-- Upload latency với presigned URL.
-- Lambda duration giảm vì Lambda chỉ tạo URL, không stream file.
-- Số lỗi upload trong CloudWatch/API Gateway.
-
-**Trade-off accepted:**
-
-- Flow phức tạp hơn một bước: API tạo URL, browser upload S3, ingestion Lambda xử lý sau.
-- Đổi lại production hơn, scale tốt hơn, và tránh payload limit.
-
-### Decision 3: DynamoDB lexical retrieval thay vì Bedrock KB + OpenSearch Serverless trong MVP
-
-**Decision:** Dùng DynamoDB để lưu chunks và lexical top-k retrieval cho demo EduTech.
-
-**Alternatives considered:**
-
-- Bedrock Knowledge Base + OpenSearch Serverless: retrieval semantic tốt hơn, nhưng có fixed cost và thêm provisioning risk.
-- Bedrock Knowledge Base + S3 Vectors: rẻ hơn OpenSearch, production hơn lexical, nhưng cần kiểm tra region availability và team chưa chắc đã quen setup.
-
-**Measurement nên thu thập:**
-
-- 10 câu hỏi test trên 1-2 lecture files.
-- Response relevance điểm 1-5.
-- Precision@k: top 3 chunks có chứa nội dung đúng không.
-- Latency p50/p95 cho query.
-- Estimated cost của DynamoDB lexical vs OpenSearch/S3 Vectors trong 48h.
-
-**Trade-off accepted:**
-
-- Lexical retrieval kém semantic hơn vector search, dễ miss câu hỏi paraphrase.
-- Đổi lại chi phí thấp, dễ debug, dễ giải thích, đủ cho scope demo nếu measurement đạt ngưỡng.
+- Pipeline phức tạp hơn upload thẳng vào KB.
+- Đổi lại đáp ứng đúng Core Challenge của Domain A: có xử lý chất lượng input, có fallback path, và có measurement.
 
 ### Decision 4: Claude Haiku/model rẻ thay vì Sonnet trong dev
 
-**Decision:** Dùng Claude Haiku hoặc model rẻ đủ chất lượng cho summary/Q&A/quiz trong dev và demo mặc định.
+**Decision:** Dùng Claude Haiku hoặc model rẻ đủ chất lượng cho study guide/Q&A/flashcards/quiz trong dev và demo mặc định.
 
 **Alternatives considered:**
 
@@ -298,19 +476,26 @@ Browser
   -> API Gateway HTTP API
       -> Lambda API handlers
           -> create presigned upload URL
-          -> query DynamoDB document/status/chunks
-          -> call Bedrock InvokeModel for study guide/Q&A/flashcards/quiz
+          -> write/read DynamoDB metadata and status
+          -> start/get Bedrock KB ingestion job
+          -> call Bedrock KB RetrieveAndGenerate for Q&A
+          -> call Bedrock Retrieve + Converse for study guide/flashcards/quiz
           -> write study events for weekly topic dashboard
           -> publish CloudWatch metrics/logs
-  -> S3 private bucket: raw lecture files
-      -> S3 ObjectCreated event
-      -> Lambda ingestion worker
-          -> extract text with pypdf/pdfplumber
-          -> fallback OCR/Textract for low text density pages
-          -> chunk text with slide_number/chunk_id citation metadata
-          -> write metadata/chunks/status to DynamoDB
-  -> DynamoDB: user state, docs, chunks, study guide, flashcards, quiz history, studied topics
-  -> Bedrock InvokeModel: summary, Q&A, quiz
+  -> S3 private bucket
+      -> raw/{user_id}/{doc_id}/lecture.pdf
+      -> kb-input/{user_id}/{doc_id}/lecture.pdf OR lecture.md
+  -> Preprocessing Lambda
+      -> pypdf/pdfplumber text quality check
+      -> copy raw PDF to kb-input/ if quality OK
+      -> create normalized markdown via fallback if quality poor
+  -> Bedrock Knowledge Base
+      -> data source scoped to kb-input/
+      -> parse/chunk/embed selected source
+      -> store vectors in S3 Vectors
+  -> DynamoDB
+      -> user state, doc metadata, ingestion status
+      -> study guide, flashcards, quiz history, studied topics
   -> CloudWatch Dashboard/Alarms/Logs Insights
 ```
 
@@ -319,8 +504,10 @@ Security notes:
 - CloudFront public, S3 frontend origin configured safely.
 - Upload bucket private, Block Public Access bật.
 - Raw document objects encrypted at rest.
+- KB input prefix controlled; KB không ingest `raw/` để tránh duplicate.
 - API Gateway dùng JWT authorizer nếu kịp; fallback test user cho W7 demo.
-- Lambda role scoped theo ARN, không dùng wildcard rộng.
+- Lambda role scoped theo ARN/prefix, không dùng wildcard rộng.
+- Bedrock KB service role scoped to `kb-input/` and S3 Vectors index.
 - DynamoDB không public-facing như RDS; access qua IAM, và có VPC endpoint nếu Lambda đặt trong VPC.
 - Không commit AWS keys hoặc secrets.
 
@@ -332,8 +519,9 @@ Security notes:
 - AI invocation thật từ app.
 - Persistent state trong DynamoDB.
 - File upload vào S3 private bucket.
-- Study guide, flashcards, 10-question quiz, Q&A citation theo slide, và weekly topic dashboard.
-- Non-trivial document extraction có fallback path và measurement.
+- Bedrock KB + S3 Vectors RAG path.
+- Study guide, flashcards, 10-question quiz, Q&A citation, và weekly topic dashboard.
+- Non-trivial document preprocessing có fallback path và measurement.
 - Retrieval quality measurement trên ít nhất 5 probe questions.
 - IAM least privilege baseline.
 - Cost discipline dưới $30 nếu không dùng fixed-cost services.
@@ -342,19 +530,37 @@ Security notes:
 **Chưa đủ cho production SaaS thật:**
 
 - Nếu dùng `X-User-Id` fallback thì auth chưa an toàn; production cần Cognito/JWT hoặc auth provider thật.
-- Lexical retrieval chưa đủ mạnh cho paraphrase/semantic questions; production nên benchmark Bedrock KB + S3 Vectors hoặc vector store khác.
+- Tenant isolation cần enforce bằng auth claims, KB metadata filters, IAM/data model, và test cross-user leakage.
 - Ingestion async cần retry/DLQ rõ hơn nếu xử lý nhiều files.
-- Multi-tenant isolation cần enforce bằng auth claims, IAM/data model, và retrieval filter nghiêm ngặt.
 - Cần CI/CD, IaC đầy đủ, canary/rollback, dependency scanning, và alarm set đầy đủ nếu launch thật.
+- Cần chính sách retention/delete cho raw files, kb-input files, vector entries, và DynamoDB records.
 
 ## Cách defend trong QnA
 
-"DynamoDB là managed service với IAM-based access control, không có public/private subnet concept như RDS. Chúng em implement least-privilege IAM roles để isolate access. Việc không dùng VPC cho path mặc định giúp tránh NAT Gateway cost ($1.08/day) và giảm cold start latency, phù hợp với cost optimization goal (<$30). Nếu trainer yêu cầu network foundation rõ hơn, Lambda có thể đặt trong VPC và dùng Gateway Endpoint cho S3/DynamoDB cùng Interface Endpoint cho Bedrock, vẫn không cần NAT Gateway."
+**Vì sao không tự extract/chunk/lưu chunks vào DynamoDB?**
+
+"Vì core feature là RAG trên lecture slides. Bedrock Knowledge Base đã xử lý parsing/chunking/embedding/retrieval và trả citations. Nếu tự làm bằng DynamoDB lexical retrieval thì rẻ nhưng kém semantic, dễ miss paraphrase, và phải tự viết nhiều logic. Chúng em chỉ dùng pypdf/pdfplumber/Textract trước ingestion để kiểm soát chất lượng input, không dùng chúng làm retrieval engine chính."
+
+**Vì sao vẫn cần pypdf/pdfplumber nếu dùng Bedrock KB?**
+
+"Không phải để thay KB. pypdf/pdfplumber là quality gate trước ingestion. Nếu PDF text tốt, KB ingest bản PDF. Nếu PDF scan/table-heavy, chúng em tạo markdown/txt sạch hơn rồi cho KB ingest bản đã normalize. Cách này đáp ứng Domain A vì chúng em chứng minh có xử lý document intelligence, không chỉ upload PDF mù quáng."
+
+**Vì sao dùng S3 Vectors thay vì OpenSearch Serverless?**
+
+"OpenSearch Serverless có fixed OCU cost và dễ thành cost driver trong 48h. S3 Vectors là AWS-managed vector store, setup nhẹ hơn và phù hợp $100 hard cap. Với demo traffic W7, S3 Vectors đủ cho RAG path và dễ defend về cost discipline."
+
+**Vì sao DynamoDB vẫn xuất hiện?**
+
+"DynamoDB không dùng để lưu retrieval chunks trong path chính. DynamoDB lưu state của app: user, document metadata, ingestion status, study guide, flashcards, quiz history, và studied topics. Retrieval thuộc về Bedrock KB + S3 Vectors."
+
+**DynamoDB/VPC defend:**
+
+"DynamoDB là managed service với IAM-based access control, không có public/private subnet concept như RDS. Chúng em implement least-privilege IAM roles để isolate access. Việc không dùng VPC cho path mặc định giúp tránh NAT Gateway cost và giảm cold start latency. Nếu trainer yêu cầu network foundation rõ hơn, Lambda có thể đặt trong VPC và dùng Gateway Endpoint cho S3/DynamoDB cùng Interface Endpoint cho Bedrock, vẫn không cần NAT Gateway."
 
 ## Kết luận
 
 Lựa chọn phù hợp nhất cho team:
 
-**EduTech Study Buddy + S3/CloudFront + API Gateway HTTP API + Lambda + S3 presigned upload + async ingestion Lambda + DynamoDB + Bedrock InvokeModel + CloudWatch Observability + SAM/CloudFormation.**
+**EduTech Study Buddy + S3/CloudFront + API Gateway HTTP API + Lambda + S3 presigned upload + pypdf/pdfplumber quality gate + Bedrock Knowledge Base + S3 Vectors + DynamoDB metadata/state + CloudWatch Observability + SAM/CloudFormation.**
 
-Kiến trúc này đáp ứng đủ 7 mandatory, production-oriented hơn bản upload trực tiếp qua Lambda, có Optional #8 để kéo điểm, có Bonus E và H khả thi, chi phí thấp, và dễ giải thích trong QnA. Nếu còn thời gian sau khi happy path ổn định, nâng cấp tiếp theo nên là Cognito/JWT và semantic retrieval bằng Bedrock KB + S3 Vectors.
+Kiến trúc này đáp ứng đủ 7 mandatory, bám sát Domain A, production-oriented hơn DynamoDB lexical retrieval, có Optional #8 để kéo điểm, có Bonus E và H khả thi, chi phí thấp, và dễ giải thích trong QnA. Nếu KB/S3 Vectors bị block bởi region/model access trong 48h, fallback khẩn cấp mới là DynamoDB lexical retrieval.
