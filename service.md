@@ -204,3 +204,8 @@ Lua chon phu hop nhat cho team:
 **EduTech Study Buddy + S3/CloudFront + API Gateway HTTP API + Lambda + DynamoDB + S3 + Bedrock InvokeModel + CloudWatch Observability + SAM/CloudFormation.**
 
 Kien truc nay dap ung du 7 mandatory, co Optional #8 de keo diem, co Bonus E va H kha thi, chi phi thap, va de giai thich trong QnA.
+
+
+Cách defend trong QnA:
+
+"DynamoDB là managed service với IAM-based access control, không có public/private subnet concept như RDS. Chúng em đã implement least-privilege IAM roles để isolate access. Việc không dùng VPC giúp tránh NAT Gateway cost ($1.08/day) và giảm cold start latency, phù hợp với cost optimization goal (<$30)."
