@@ -1,4 +1,4 @@
-# Week 7 — Evidence Pack
+# Week 7 - Evidence Pack
 
 - [Project Group 12](https://github.com/truongcongtu318/xbrain-learners-group12)
 - [Evidence Pack](#evidence-pack)
@@ -125,17 +125,45 @@ We implemented **Full Observability (Capability #8)** to track application healt
 
 # Section 6.5. Measurement & Decisions
 
-### 6.5.1 Document Extraction Strategy
+## 6.5.1 Use AWS Lambda outside VPC
+```
+   DECISION: Use AWS Lambda outside VPC for document upload processing, Knowledge Base auto sync, S3 presigned URL generating, and study chatbot because the architecture is fully serverless and only communicates with managed AWS services such as S3, API Gateway, DynamoDB, CloudWatch, and Bedrock.
 
-Slide decks present non-trivial data extraction challenges (tables, diagrams, text layouts).
-- **Parser Decision**: We benchmarked two extraction approaches:
-  - *Approach 1*: Pure text extraction via `pdfplumber` running inside Lambda.
-  - *Approach 2*: Amazon Textract for table/layout awareness.
-  - *Decision*: We used a **Hybrid strategy**. We parsed text-heavy slides using `pdfplumber` (saving costs, running locally in Lambda for free). If the extracted characters per page fell below a threshold of `[Insert actual threshold, e.g., 100 characters]`, the system automatically fell back to calling Amazon Bedrock Vision or Textract to read image-based pages.
-- **Chunking Rationale**: We selected **Semantic Chunking** instead of a fixed character window. This groups sliding notes by context boundaries, keeping bullet points on the same slide intact to preserve study context.
+   ALTERNATIVES CONSIDERED:
+      - Lambda inside VPC with private subnets and communicate via VPC endpoints gateway and interface - eliminated because there is no private RDS, EC2, or internal service that Lambda needs to access. 
+      - ECS Fargate inside VPC - eliminated because the document processing workload, the auto sync Knowledge base, S3 presigned URL generating, and study chatbot are event driven and they are not required to run continously 24/7. Running these service in a long time can increase costs compared to Lambda.
 
-### 6.5.2 Serverless architecture with Lambda, DynamoDB without VPC
+   MEASUREMENT:
+      - Lambda cold start and execution time for S3-triggered document processing = 1.0–1.5 seconds - measured from CloudWatch logs.
+      - NAT Gateway cost avoided = approximately $32/month before data processing cost - calculated from hourly NAT Gateway pricing, while the current design requires no NAT Gateway.
 
+   EVIDENCE:
+      - docs/images/W7-architect.png - The architecture with Lambda without VPC attached.
+      -  - CloudWatch logs showing successful S3-triggered Lambda execution.
+      - CloudWatch screenshot of Lambda duration histogram
+
+   TRADE-OFF ACCEPTED:
+      - Lambda cannot directly access private resources such as RDS, EC2 in a private subnet. This is acceptable because the current system uses managed serverless services and IAM-based access instead of private network access.
+```
+
+## 6.5.2 Use Hybrid text extraction strategy
+```
+   DECISION: Use Hybrid text extraction strategy. For documents flagged as good quality, the document is copied to kb-input bucket. For documents flagged as bad quality, implement a page-by-page hybrid loop that defaults to use pypdf text extraction, but switches to use AWS Textract (detect_document_text) for those specific pages if the extracted word count is less than 15 words (len(pypdf_text.split()) < 15). Then, they are saved as md file and store in kb-input bucket.
+
+   ALTERNATIVES CONSIDERED:
+      - Textract everywhere - eliminated because Textract costs $0.0015/page × 200 pages/day = $0.30/day. Even in low quality documents, many pages still have only text. Running Textract for all pages of a 40-slide document when only 10 pages are images would waste ~$0.045 per file.
+      - pypdf everywhere - eliminated because if a page is a pure scanned image or include many tables, pypdf cannot read tables-as-images. Using pypdf for all documents can cause loss of important image-based or table-based data.
+
+   MEASUREMENT:
+      ......
+   EVIDENCE:
+      - CloudWatch metric TextractFallbackPages successfully tracking intermittent OCR triggers on sub-sections of single document uploads.
+      - Consolidated final Markdown structure containing mixed section headers: ## Slide X (pypdf) and ## Slide Y (AWS Textract).
+
+   TRADE-OFF ACCEPTED:
+      ........
+
+```
 
 
 # Section 7. Lesson Learned
@@ -149,12 +177,13 @@ One concrete failure case .........
 
 # Section 8. Teardown Plan
 
-To ensure zero continuing personal AWS costs after the hackathon, we will execute this teardown plan:
+To eliminate all services deployed in Hackathon to ensure zero continuing personal AWS costs after the hackathon, we will execute the following teardown plan:  
 
-1. **Delete Vector Storage**: Evict the Bedrock Knowledge Base and tear down the vector index (S3 Vectors).
+1. **Delete Amazon Bedrock and S3 Vector Storage**: Delete the Knowledge Base sync configuration, vector indices, and empty the target S3 Vector bucket. 
 2. **Empty & Delete S3 Buckets**: S3 buckets cannot be deleted while containing files. We will empty all uploaded student slides and frontend build files from our S3 buckets, then delete the buckets.
-3. **Delete DynamoDB Tables**: Delete the session and state DynamoDB tables.
-4. **Delete Compute & API Layers**: Delete AWS Lambda backend functions, Lambda layers, and the API Gateway HTTP API.
-5. **Disable CDN**: Delete the CloudFront distribution.
-6. **Clean Up IAM & KMS**: Delete IAM roles created for the hackathon.
-7. **Verification**: Take a Cost Explorer screenshot on Monday to confirm daily spend drops to exactly $0.00.
+3. **Delete DynamoDB Tables**: Delete the Document State and Metadata table
+4. **Delete Compute and API Layers**: Delete AWS Lambda backend functions (4 functions), Lambda layers, and the API Gateway HTTP API.
+5. **Disable CDN**: Disable and delete the CloudFront distribution, AWS WAF ACLs, and Route 53 DNS records pointing to the app.
+6. **Clean Up IAM**: Delete IAM roles created for the hackathon.
+7. **Monitoring and Governance**: Delete CloudWatch Alarms such as Lambda error alarms, SNS Topics, and custom metric definitions under DocumentPipeline.
+8. **Verification**: Take a Cost Explorer screenshot to confirm daily spend drops to exactly $0.00.
