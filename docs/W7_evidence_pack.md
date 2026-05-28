@@ -1,5 +1,19 @@
 # Week 7 — Evidence Pack
 
+- [Project Group 12](https://github.com/truongcongtu318/xbrain-learners-group12)
+- [Evidence Pack](#evidence-pack)
+- [Live URL](https://truongtudev.id.vn/)
+- [Section 1 - Cover](#section-1-cover)
+- [Section 2 - Pitch and Vision](#section-2-pitch-and-vision)
+- [Section 3 - Architecture](#section-3-architecture)
+- [Section 4 - Cost Deployment](#section-4-cost-deployment)
+- [Section 5 - Security](#section-5-security)
+- [Section 6 - Monitoring](#section-6-monitoring)
+- [Section 6.5 - Measurement & Decisions](#section-65-measurement--decisions)
+- [Section 7 - Lesson Learned](#section-7-lesson-learned)
+- [Section 8 - Teardown Plan](#section-8-teardown-plan)
+
+
 # Section 1. Cover
 
 - Group number: 12
