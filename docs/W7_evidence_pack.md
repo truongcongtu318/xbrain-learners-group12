@@ -19,6 +19,8 @@
 
 # Section 3. Architecture
 
+![Architecture W7](./images/W7-architect.png)
+
 # Section 4. Cost Deployment
 
 # Section 5. Security
