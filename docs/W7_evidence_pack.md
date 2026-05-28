@@ -133,7 +133,7 @@ We implemented **Full Observability (Capability #8)** to track application healt
 
 # Section 6.5. Measurement & Decisions
 
-### 6.5.1 Document Intelligence Strategy
+### Document Intelligence Strategy
 
 Slide decks present non-trivial data extraction challenges (tables, diagrams, text layouts).
 - **Parser Decision**: We benchmarked two extraction approaches:
@@ -141,16 +141,6 @@ Slide decks present non-trivial data extraction challenges (tables, diagrams, te
   - *Approach 2*: Amazon Textract for table/layout awareness.
   - *Decision*: We used a **Hybrid strategy**. We parsed text-heavy slides using `pdfplumber` (saving costs, running locally in Lambda for free). If the extracted characters per page fell below a threshold of `[Insert actual threshold, e.g., 100 characters]`, the system automatically fell back to calling Amazon Bedrock Vision or Textract to read image-based pages.
 - **Chunking Rationale**: We selected **Semantic Chunking** instead of a fixed character window. This groups sliding notes by context boundaries, keeping bullet points on the same slide intact to preserve study context.
-
-### 6.5.2 RAG Performance & Measurement
-
-> [!NOTE]
-> Run a test using your 5+ probe questions on your sample documents and fill in your actual measurements.
-
-- **Retrieval Quality (Precision@k)**: `[Insert actual precision rate, e.g., 85%]` on a test set of `[Insert number]` questions.
-- **Failure Mode Discovered**:
-  - *Problem*: Multi-column comparison tables on slides were read row-by-row across columns, mixing columns together and causing the LLM to cite incorrect comparisons.
-  - *Mitigation*: We adjusted the extraction pipeline to enforce layout-aware text parsing and appended a custom system prompt instructively formatting text segments as structured Markdown tables prior to vector ingestion.
 
 # Section 7. Lesson Learned
 
