@@ -102,6 +102,8 @@ We hardened our StudyBuddy application by targeting **Advanced Security (Capabil
 
 1. **Least-Privilege IAM Roles**:
    - The backend Lambda execution role has no wildcard `*` actions. It is scoped to specific resources and actions.
+   - The following diagram shows the IAM role for each Lambda to be able ensure the least privilege principle
+      ![IAM Role](./images/IAM-Role.png)
 2. **Data Encryption at Rest & in Transit**:
    - **At Rest**: Utilized SSE-S3 to encrypt the raw document S3 bucket.
    - **In Transit**: All API requests and frontend distributions are served strictly over **TLS 1.2 / TLS 1.3** via CloudFront and HTTPS API Gateway.
