@@ -75,6 +75,14 @@ Our architecture is optimized to stay well under the **$100 cap**. By choosing S
 ## 4.1 Cost Discipline (ap-southeast-1 Singapore Pricing)
 
 ### Cost screenshots (Day 1 EOD / Day 2 EOD / Friday pre-demo)
+#### End of day 1
+![EOD 1](./images/EOD1.png)
+
+#### End of day 2
+![EOD 2](./images/EOD2.png)
+
+#### Morning demo day
+![Morning demo D3](./images/morningD3.png)
 
 
 ### Breakdown by service
@@ -112,9 +120,10 @@ We hardened our StudyBuddy application by targeting **Advanced Security (Capabil
 
 We implemented **Full Observability (Capability #8)** to track application health:
 
-- **CloudWatch Dashboard**: A centralized dashboard tracking Lambda duration, concurrency, error rates, and API Gateway integration latencies.
-- **Custom Metric**: Published custom metric `StudyBot/DocumentsIngested` each time a student successfully uploads a document and embeds it into the Bedrock Knowledge Base.
-- **CloudWatch Alarms**: Configured a CloudWatch Alarm on Lambda `Errors` metric that sends an immediate email alert via AWS SNS if error rates exceed `[Insert actual threshold, e.g., 2 in a 5-minute window]`.
+- **CloudWatch Dashboard**: A centralized dashboard tracking Lambda duration, invocations, error rates, throttles,  and API Gateway 5xx and 4xx errors.
+  - Dashboard shared URL: [Live URL](https://cloudwatch.amazonaws.com/dashboard.html?dashboard=g12-studybot-dashboard&context=eyJSIjoidXMtZWFzdC0xIiwiRCI6ImN3LWRiLTQ3NDAxMzIzODYyNSIsIlUiOiJ1cy1lYXN0LTFfVVNiaFRVVVRjIiwiQyI6IjIwM3ZlNW0zdXRpZ2dva2RsYnN1ZDMwOGRkIiwiSSI6InVzLWVhc3QtMTpjYjM1ZGIyNi02ZTc4LTQzMTEtOTBjOS02OTNhYTMyMjVlYTEiLCJPIjoiYXJuOmF3czppYW06OjQ3NDAxMzIzODYyNTpyb2xlL3NlcnZpY2Utcm9sZS9DV0RCU2hhcmluZy1QdWJsaWNSZWFkT25seUFjY2Vzcy05WElQNDQ0RyIsIk0iOiJQdWJsaWMifQ%3D%3D&start=PT12H&end=null&fbclid=IwY2xjawSFyOJleHRuA2FlbQIxMABicmlkETFQNlNHQTJPZkdQRlZ2aDdIc3J0YwZhcHBfaWQQMjIyMDM5MTc4ODIwMDg5MgABHpbG33ZDoZumC_m3K5lO7fUENBzK63VMR4ZRad6h_qSpl32sYiJrfJieARuk_aem_57L2P3tmlpBqq3MuD6H4yg)
+- **Custom Metric**: Published custom metric for `StudyBot` each time a student successfully uploads a document including: `DocumentsProcessed`, `GoodQualityPDF`, `TextractFallbackPages`, `TotalPagesProcessed`
+- **CloudWatch Alarms**: Configured a CloudWatch Alarm on Lambda `Errors` metric (5xx and 4xx status code) that sends an immediate email alert via AWS SNS
 - **Saved Log Insights Queries**: Built and saved queries to filter for `ERROR` and `WARNING` strings in the Lambda log streams for easy live triage:
   ```sql
   fields @timestamp, @message
