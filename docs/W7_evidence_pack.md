@@ -192,12 +192,19 @@ We implemented **Full Observability (Capability #8)** to track application healt
 
 
 # Section 7. Lesson Learned
+## What went well
 
 The serverless architecture meet the project's requirements and goals'. S3, Lambda, API Gateway, CloudFront, and Bedrock Knowledge Base are used to build a document intelligence system without managing servers, VPCs, or complex networking. The flow upload to knowledge base was also clear with the flow: lecture PDFs are stored in S3, processed and stored into kb-input S3 bucket, then synced into Bedrock Knowledge Base, and used for RAG-based answers. 
 
-What I would do differently ........
+## What I would do differently if we had more time:
 
-One concrete failure case .........
+- *Add a visible ingestion status workflow*: The current upload flow works, but the user experience can be unclear while the document is being processed and synced into the Knowledge Base. With more time, we would store a document status lifecycle in DynamoDB, such as UPLOADED -> PROCESSING -> SYNCING_TO_KB -> READY -> FAILED, and show that progress in the frontend.
+- *Improve document quality validation before ingestion*: We would add stronger checks for scanned PDFs, empty slides, image-heavy pages, and unsupported files before sending documents into the RAG pipeline. This would reduce bad chunks in the Knowledge Base and make answers more reliable.
+- *Strengthen retry and recovery logic*: If a Knowledge Base sync job or Textract fallback fails, the system should retry safely and expose the failure reason to the team instead of requiring manual CloudWatch log inspection.
+
+## One concrete failure mode identified:
+
+- Low-quality or scanned lecture slides can produce very little text when extracted with pypdf. If those pages contain important content as images or tables, the Knowledge Base receives incomplete context. As a result, the chatbot may still answer general questions, but it can miss slide-specific details or return weaker citations. The mitigation we would prioritize is the hybrid fallback described in Section 6.5: run OCR with AWS Textract only on pages where pypdf extracts fewer than 15 words. The trade-off is higher processing time and extra per-page Textract cost.
 
 
 # Section 8. Teardown Plan
