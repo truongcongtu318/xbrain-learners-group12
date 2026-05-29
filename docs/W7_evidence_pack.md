@@ -135,12 +135,12 @@ We implemented **Full Observability (Capability #8)** to track application healt
 
    MEASUREMENT:
       - Lambda cold start and execution time for S3-triggered document processing = 1.0–1.5 seconds - measured from CloudWatch logs.
-      - NAT Gateway cost avoided = approximately $32/month before data processing cost - calculated from hourly NAT Gateway pricing, while the current design requires no NAT Gateway.
+      - While the current design requires no NAT Gateway, NAT Gateway cost avoided = approximately $0.059 per hour or $0.059 per GB data processed before data processing cost
 
    EVIDENCE:
       - docs/images/W7-architect.png - The architecture with Lambda without VPC attached.
-      -  - CloudWatch logs showing successful S3-triggered Lambda execution.
-      - CloudWatch screenshot of Lambda duration histogram
+      - docs/images/cold-start.png - The cold start time is approximately 1 second as measured and claimed 
+      - docs/images/W7-architect.png - The architecture with Lambda without VPC attached, so there is no need for NAT gateway
 
    TRADE-OFF ACCEPTED:
       - Lambda cannot directly access private resources such as RDS, EC2 in a private subnet. This is acceptable because the current system uses managed serverless services and IAM-based access instead of private network access.
@@ -155,13 +155,16 @@ We implemented **Full Observability (Capability #8)** to track application healt
       - pypdf everywhere - eliminated because if a page is a pure scanned image or include many tables, pypdf cannot read tables-as-images. Using pypdf for all documents can cause loss of important image-based or table-based data.
 
    MEASUREMENT:
-      ......
+      - Cost reduction per 40-Page Slide lecture with 10 Textract fallback pages: Saved around 75% on OCR fees ($0.015 spent on 10 pages vs. $0.060 for Textract-everywhere).
+      - Processing time reduction for good quality document with around 1600ms by completely bypassing the page iteration loop.
+      
    EVIDENCE:
-      - CloudWatch metric TextractFallbackPages successfully tracking intermittent OCR triggers on sub-sections of single document uploads.
-      - Consolidated final Markdown structure containing mixed section headers: ## Slide X (pypdf) and ## Slide Y (AWS Textract).
+      - docs/images/good-quality.png - If the document is good quality, it copied to the kb-input bucket for syncing.
+      - docs/images/TextractFallbackPages.png - If the document is bad quality and contains many images, figures or tables, Textract is used to extract information. CloudWatch metric TextractFallbackPages successfully tracking intermittent OCR triggers on sub-sections of single document uploads.
 
    TRADE-OFF ACCEPTED:
-      ........
+      - The hybrid strategy takes longer than executing a single extraction method (pypdf or Textract exclusively). It is acceptable since the output is clean and structured Markdown data optimized for downstream Knowledge Base chunking and vector syncing. 
+      - Because the Lambda process PDF function runs on an asynchronous S3 Event Trigger, processing in the background and does not impact on front-end responsiveness or the immediate user experience.
 
 ```
 
