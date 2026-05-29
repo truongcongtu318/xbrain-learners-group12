@@ -85,18 +85,31 @@ Our architecture is optimized to stay well under the **$100 cap**. By choosing S
 ![Morning demo D3](./images/morningD3.png)
 
 
-### Breakdown by service
-| Service | Calculation & Usage | Deployed Cost ($) |
-|---------|---------------------|-------------------|
-| **AWS Lambda** | `[Insert actual number]` invocations | `$ [Insert actual cost]` |
-| **API Gateway HTTP** | `[Insert actual number]` requests | `$ [Insert actual cost]` |
-| **Bedrock Claude 4.5 Haiku** | `[Insert actual input/output tokens]` | `$ [Insert actual cost]` |
-| **Bedrock Embeddings** | Ingestion of `[Insert actual number]` documents | `$ [Insert actual cost]` |
-| **Vector Database (S3 Vectors)** | `[Insert actual vector usage details]` | `$ [Insert actual cost]` |
-| **DynamoDB** | `[Insert actual write/read capacity units consumed]` | `$ [Insert actual cost]` |
-| **Amazon S3** | `[Insert actual storage size and request counts]` | `$ [Insert actual cost]` |
-| **CloudFront** | Outbound data transfer | `$ [Insert actual cost]` |
-| **Total Spend** | **For the 48-hour build and demo window** | **`$ [Insert total cost]`** |
+### Breakdown by service (from Cost Explorer, ap-southeast-1)
+
+| Service | Day 1 (May 27) | Day 2 (May 28) | Total |
+|---------|---------------|---------------|-------|
+| **AWS WAF** | $0.18 | $0.00 | **$0.18** |
+| **Bedrock Claude Opus 4.5** | $0.03 | $0.00 | **$0.03** |
+| **Bedrock Claude Haiku 4.5** | $0.02 | $0.00 | **$0.02** |
+| **Bedrock Claude 3 Haiku** | $0.00 | $0.05 | **$0.05** |
+| **Bedrock Cohere Embed Model 3 Multilingual** | $0.00 | $0.01 | **$0.01** |
+| **AWS Secrets Manager** | $0.01 | $0.01 | **$0.02** |
+| **Amazon S3** | $0.00 | $0.00 | **$0.00** |
+| **API Gateway** | $0.00 | $0.00 | **$0.00** |
+| **Amazon CloudFront** | $0.00 | $0.00 | **$0.00** |
+| **Amazon DynamoDB** | $0.00 | $0.00 | **$0.00** |
+| **AWS Lambda** | $0.00 | $0.00 | **$0.00** |
+| **Amazon Route 53** | $0.00 | $0.00 | **$0.00** |
+| **Others** | $0.01 | $0.00 | **$0.01** |
+| **🧾 Total Spend** | **$0.25** | **$0.07** | **$0.32** |
+
+> **$0.32 total out of $100 cap — 0.32% of budget used.** Well within the `< $30` bonus-eligibility threshold.
+
+**Top 3 cost drivers:**
+1. **AWS WAF** ($0.18, 56% of total) — WAF Web ACL base fee prorated for 2 days. This is a fixed daily charge for attaching WAF to CloudFront distribution.
+2. **Bedrock Claude 3 Haiku inference** ($0.05, 16% of total) — the primary AI model used for RAG-based Q&A on Day 2.
+3. **Bedrock Claude Haiku 4.5 / Opus 4.5** ($0.05 combined, 16% of total) — model evaluation during Day 1 development and prompt tuning.
 
 ## 4.2 Cost Discipline Strategy
 
