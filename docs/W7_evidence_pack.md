@@ -124,13 +124,14 @@ We implemented **Full Observability (Capability #8)** to track application healt
   - Dashboard shared URL: [Live URL](https://cloudwatch.amazonaws.com/dashboard.html?dashboard=g12-studybot-dashboard&context=eyJSIjoidXMtZWFzdC0xIiwiRCI6ImN3LWRiLTQ3NDAxMzIzODYyNSIsIlUiOiJ1cy1lYXN0LTFfVVNiaFRVVVRjIiwiQyI6IjIwM3ZlNW0zdXRpZ2dva2RsYnN1ZDMwOGRkIiwiSSI6InVzLWVhc3QtMTpjYjM1ZGIyNi02ZTc4LTQzMTEtOTBjOS02OTNhYTMyMjVlYTEiLCJPIjoiYXJuOmF3czppYW06OjQ3NDAxMzIzODYyNTpyb2xlL3NlcnZpY2Utcm9sZS9DV0RCU2hhcmluZy1QdWJsaWNSZWFkT25seUFjY2Vzcy05WElQNDQ0RyIsIk0iOiJQdWJsaWMifQ%3D%3D&start=PT12H&end=null&fbclid=IwY2xjawSFyOJleHRuA2FlbQIxMABicmlkETFQNlNHQTJPZkdQRlZ2aDdIc3J0YwZhcHBfaWQQMjIyMDM5MTc4ODIwMDg5MgABHpbG33ZDoZumC_m3K5lO7fUENBzK63VMR4ZRad6h_qSpl32sYiJrfJieARuk_aem_57L2P3tmlpBqq3MuD6H4yg)
 - **Custom Metric**: Published custom metric for `StudyBot` each time a student successfully uploads a document including: `DocumentsProcessed`, `GoodQualityPDF`, `TextractFallbackPages`, `TotalPagesProcessed`
 - **CloudWatch Alarms**: Configured a CloudWatch Alarm on Lambda `Errors` metric (5xx and 4xx status code) that sends an immediate email alert via AWS SNS
-- **Saved Log Insights Queries**: Built and saved queries to filter for `ERROR` and `WARNING` strings in the Lambda log streams for easy live triage:
+- **Saved Log Insights Queries**: Built and saved queries to filter for `Processing uploaded objects` strings in the Lambda log streams for easy live triage:
   ```sql
-  fields @timestamp, @message
-  | filter @message like /ERROR/
-  | sort @timestamp desc
-  | limit 50
+   fields @timestamp, @message
+   | filter @message like /Processing uploaded object/
+   | sort @timestamp desc
   ```
+  ![Saved query](./images/saved-query.jpg)
+  ![Result from query](./images/result-insight.jpg)
 
 # Section 6.5. Measurement & Decisions
 
