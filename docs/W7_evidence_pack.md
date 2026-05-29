@@ -145,7 +145,7 @@ We implemented **Full Observability (Capability #8)** to track application healt
   ```
   ![Saved query](./images/saved-query.jpg)
   ![Result from query](./images/result-insight.jpg)
-
+- Why this query: Knowing which files uploaded successfully, when to process them, which bucket, and which path. If there are no logs, it indicates an S3 trigger error or a lambda not running.
 # Section 6.5. Measurement & Decisions
 
 ## 6.5.1 Use AWS Lambda outside VPC
