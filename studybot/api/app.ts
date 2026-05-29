@@ -7,7 +7,6 @@ import { documentRoutes } from './routes/documents';
 import { evidenceRoutes } from './routes/evidence';
 import { healthRoutes } from './routes/health';
 import { meRoutes } from './routes/me';
-import { progressRoutes } from './routes/progress';
 import { studyRoutes } from './routes/study';
 import { uploadRoutes } from './routes/uploads';
 
@@ -22,7 +21,6 @@ export function createApp() {
   app.route('/', uploadRoutes(providers));
   app.route('/', documentRoutes(providers));
   app.route('/', studyRoutes(providers));
-  app.route('/', progressRoutes(providers));
   app.route('/', evidenceRoutes(providers));
 
   app.onError((error, c) => {

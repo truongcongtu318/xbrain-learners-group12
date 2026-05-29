@@ -1,4 +1,4 @@
-import type { DocumentStatus } from '../../../types/domain';
+import type { DocumentStatus } from '../../types/domain';
 
 const labels: Record<DocumentStatus, string> = {
   UPLOADING: 'Uploading',

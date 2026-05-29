@@ -48,17 +48,13 @@ describe('StudyBot API', () => {
     expect(quiz.questions).toHaveLength(10);
   });
 
-  it('returns citations and weekly progress topics', async () => {
+  it('returns citations for selected study sources', async () => {
     const documents = await json<Array<{ id: string }>>(await app.request('/api/documents'));
     const documentId = documents.find((document) => document.id === 'doc-machine-learning-101')?.id ?? documents[0].id;
-    const qa = await json<{ citations: unknown[] }>(await app.request(`/api/documents/${documentId}/questions`, {
+    const qa = await json<{ citations: unknown[] }>(await app.request('/api/study', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ question: 'What is gradient descent?' })
+      body: JSON.stringify({ documentIds: [documentId], question: 'What is gradient descent?' })
     }));
     expect(qa.citations.length).toBeGreaterThan(0);
-
-    const progress = await json<{ topicsStudied: string[] }>(await app.request('/api/progress/week'));
-    expect(progress.topicsStudied.length).toBeGreaterThan(0);
-  });
-});
+  });});

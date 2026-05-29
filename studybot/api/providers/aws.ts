@@ -1,6 +1,6 @@
 import type { ApiConfig } from '../config';
 import type { AuthProvider, DocumentProvider, EvidenceProvider, Providers, StudyProvider } from '../types';
-import type { Difficulty, FlashcardDeck, QuestionAnswer, Quiz, StudyDocument, StudyGuide, UploadSession, User, WeeklyProgress } from '../../src/types/domain';
+import type { Difficulty, FlashcardDeck, QuestionAnswer, Quiz, StudyDocument, StudyGuide, UploadSession, User } from '../../src/types/domain';
 import { ApiError } from '../errors';
 
 const REQUIRED_CONFIG = [
@@ -77,7 +77,7 @@ class AwsStudyProvider implements StudyProvider {
     throw awsNotImplemented(operation);
   }
 
-  async askQuestion(_user: User, _documentId: string, _question: string): Promise<QuestionAnswer> {
+  async askQuestion(_user: User, _documentIds: string[], _question: string): Promise<QuestionAnswer> {
     this.assertReady('study.askQuestion');
   }
 
@@ -91,10 +91,6 @@ class AwsStudyProvider implements StudyProvider {
 
   async generateQuiz(_user: User, _documentId: string, _difficulty: Difficulty): Promise<Quiz> {
     this.assertReady('study.generateQuiz');
-  }
-
-  async getWeeklyProgress(_user: User): Promise<WeeklyProgress> {
-    this.assertReady('study.getWeeklyProgress');
   }
 }
 

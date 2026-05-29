@@ -1,6 +1,7 @@
 ﻿export type DocumentStatus = 'UPLOADING' | 'ANALYZING' | 'INDEXING' | 'READY' | 'FAILED';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type AppMode = 'mock' | 'aws';
+export type StudyArtifactType = 'flashcards' | 'quiz';
 
 export interface User {
   id: string;
@@ -20,10 +21,12 @@ export interface StudyDocument {
 }
 
 export interface UploadSession {
-  document: StudyDocument;
+  document?: StudyDocument;
   uploadUrl: string;
-  method: 'PUT';
-  headers: Record<string, string>;
+  method?: 'PUT';
+  headers?: Record<string, string>;
+  key?: string;
+  expiresIn?: number;
 }
 
 export interface Citation {
@@ -31,6 +34,16 @@ export interface Citation {
   label: string;
   snippet: string;
   score: number;
+  filename?: string;
+  documentId?: string;
+  pageNumber?: number;
+  location?: string;
+  sourceUri?: string;
+}
+
+export interface StudyRequest {
+  documentIds: string[];
+  question: string;
 }
 
 export interface QuestionAnswer {
@@ -67,6 +80,12 @@ export interface FlashcardDeck {
   cards: Flashcard[];
 }
 
+export interface SavedFlashcardDeck extends FlashcardDeck {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface QuizQuestion {
   id: string;
   prompt: string;
@@ -82,20 +101,26 @@ export interface Quiz {
   questions: QuizQuestion[];
 }
 
+export interface SavedQuiz extends Quiz {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuizProgress {
+  quizId: string;
+  documentId: string;
+  answers: Record<string, number>;
+  score: number;
+  total: number;
+  updatedAt: string;
+}
+
 export interface QuizAttempt {
   quizId: string;
   score: number;
   total: number;
   completedAt: string;
-}
-
-export interface WeeklyProgress {
-  weekStart: string;
-  topicsStudied: string[];
-  questionsAsked: number;
-  flashcardsReviewed: number;
-  quizAverage: number;
-  weakTopics: string[];
 }
 
 export interface EvidenceReadiness {

@@ -1,4 +1,4 @@
-import type { Citation, Difficulty, EvidenceReadiness, FlashcardDeck, QuestionAnswer, Quiz, StudyDocument, StudyGuide, UploadSession, User, WeeklyProgress } from '../../src/types/domain';
+import type { Citation, Difficulty, EvidenceReadiness, FlashcardDeck, QuestionAnswer, Quiz, StudyDocument, StudyGuide, UploadSession, User } from '../../src/types/domain';
 import type { AuthProvider, DocumentProvider, EvidenceProvider, Providers, StudyProvider } from '../types';
 import { ApiError } from '../errors';
 
@@ -94,12 +94,14 @@ const citations: Citation[] = [
 ];
 
 class MockStudyProvider implements StudyProvider {
-  async askQuestion(_user: User, documentId: string, question: string): Promise<QuestionAnswer> {
-    if (!documents.has(documentId)) throw new ApiError('DOCUMENT_NOT_FOUND', 'Document not found.', 404);
+  async askQuestion(_user: User, documentIds: string[], question: string): Promise<QuestionAnswer> {
+    if (documentIds.length === 0) throw new ApiError('NO_DOCUMENTS_SELECTED', 'Select at least one document.', 400);
+    const missingDocument = documentIds.find((documentId) => !documents.has(documentId));
+    if (missingDocument) throw new ApiError('DOCUMENT_NOT_FOUND', 'Document not found.', 404);
     return {
       id: nextQaId(),
       question,
-      answer: 'Based on your lecture, the key idea is to connect the learning objective to evidence from the slides: define the concept, explain how it is used, and cite the source slide when answering exam-style questions.',
+      answer: `Based on ${documentIds.length === 1 ? 'the selected source' : `${documentIds.length} selected sources`}, the key idea is to connect the learning objective to evidence from the materials: define the concept, explain how it is used, and cite the source when answering exam-style questions.`,
       citations,
       createdAt: now()
     };
@@ -148,17 +150,6 @@ class MockStudyProvider implements StudyProvider {
         correctIndex: 0,
         explanation: 'The correct answer ties the concept back to lecture evidence and model behavior.'
       }))
-    };
-  }
-
-  async getWeeklyProgress(): Promise<WeeklyProgress> {
-    return {
-      weekStart: '2026-05-25',
-      topicsStudied: ['Gradient descent', 'Overfitting', 'Evaluation metrics', 'Loss functions', 'Validation sets'],
-      questionsAsked: 12,
-      flashcardsReviewed: 34,
-      quizAverage: 84,
-      weakTopics: ['Precision vs recall', 'Regularization']
     };
   }
 }

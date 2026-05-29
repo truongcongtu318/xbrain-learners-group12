@@ -8,8 +8,7 @@
   StudyDocument,
   StudyGuide,
   UploadSession,
-  User,
-  WeeklyProgress
+  User
 } from '../src/types/domain';
 
 export type { AppMode, Difficulty };
@@ -38,11 +37,10 @@ export interface DocumentProvider {
 }
 
 export interface StudyProvider {
-  askQuestion(user: User, documentId: string, question: string): Promise<QuestionAnswer>;
+  askQuestion(user: User, documentIds: string[], question: string): Promise<QuestionAnswer>;
   generateStudyGuide(user: User, documentId: string): Promise<StudyGuide>;
   generateFlashcards(user: User, documentId: string): Promise<FlashcardDeck>;
   generateQuiz(user: User, documentId: string, difficulty: Difficulty): Promise<Quiz>;
-  getWeeklyProgress(user: User): Promise<WeeklyProgress>;
 }
 
 export interface EvidenceProvider {
