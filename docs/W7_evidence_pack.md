@@ -50,7 +50,7 @@ StudyBot is designed with full serverless architecture, cost efficiency, and mod
    - **Compute Layer**: AWS Lambda running Python 3.14, handling incoming POST `/upload`, and `/study` endpoints and GET `/documents`. Compute is completely stateless, scaling automatically to handle concurrent student queries.
 3. **AI / ML Feature (Capability #3)**:
    - **Bedrock Knowledge Bases**: Used to orchestrate the entire RAG pipeline. Document chunking, vector generation, and vector index retrieval are abstracted via Bedrock KBs.
-   - **Foundation Model**: Amazon Bedrock utilizing `claude haiku 4.5` for fast, highly accurate, and cost-effective text generation.
+   - **Foundation Model**: Amazon Bedrock utilizing `claude haiku 3` for fast, highly accurate, and cost-effective text generation.
    - **Embeddings Model**: `cohere.embed-english-v3` for highly accurate vector representations with 1024 dimensions and chunking size of 300 tokens.
 4. **Data Persistence (Capability #4)**:
    - **Session & User State**: Amazon DynamoDB storing user session histories, generated flashcards, and student quiz scores. Features on-demand scaling for zero base cost.
@@ -113,7 +113,7 @@ Our architecture is optimized to stay well under the **$100 cap**. By choosing S
 
 ## 4.2 Cost Discipline Strategy
 
-- **Development Model Choice**: We strictly used `Claude 4.5 Haiku` ($1.00/M input, $5.00/M output) during the development and debugging loops instead of `Claude 3.5 Sonnet` ($3.00/M input, $15.00/M output), saving significant developer budget.
+- **Development Model Choice**: We strictly used `Claude 3 Haiku` ($0.25/M input, $1.25/M output) during the development and debugging loops instead of `Claude 3.5 Sonnet` ($3.00/M input, $15.00/M output), saving significant developer budget.
 - **Budget Alerts**: Deployed an AWS Budget at $100 with an email notification threshold set at **$80 (80%)** via SNS. Cost Anomaly Detection was turned on immediately.
 - **Tagging Strategy**: Applied `Project=W7Capstone`, `Team=G12`, `Owner=<who create service in the G12>`, and `Environment=hackathon` tags to all resources for precise tracking in Cost Explorer.
 
